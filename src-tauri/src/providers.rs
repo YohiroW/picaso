@@ -1,3 +1,5 @@
+#[cfg(any(test, not(feature = "fixture-provider")))]
+pub mod openai;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Serialize)]

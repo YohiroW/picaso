@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { KeySettings } from "./features/onboarding/KeySettings";
 import { desktop, type CredentialStatus } from "./lib/desktop";
 import { Workspace } from "./features/workspace/Workspace";
-import icon from "./assets/picaso.svg";
+import icon from "../src-tauri/icons/icon.png";
 
 export function App() {
   const [status, setStatus] = useState<CredentialStatus>();

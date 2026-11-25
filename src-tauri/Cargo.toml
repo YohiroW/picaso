@@ -1,6 +1,6 @@
 [package]
 name = "picaso"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 publish = false
 
@@ -17,6 +17,8 @@ uuid = { version = "1.29.3", features = ["v4", "serde"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 rfd = "0.15"
 anyhow = "1.0.105"
+reqwest = { version = "0.12", features = ["blocking", "multipart", "json"] }
+base64 = "0.22"
 
 [profile.release]
 strip = true

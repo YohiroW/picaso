@@ -18,30 +18,29 @@ pub fn current_model() -> Model {
     }
     #[cfg(not(feature = "fixture-provider"))]
     {
-        Model {
-            provider: "openai",
-            id: "gpt-image-2",
-            can_edit: true,
-        }
+        crate::providers::openai::MODEL
     }
 }
 #[tauri::command]
-pub async fn submit_job(library: State<'_, Library>, draft: Submission) -> Result<String, String> {
-    #[cfg(feature = "fixture-provider")]
-    {
-        let library = library.inner().clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            crate::jobs::submit(&library, &crate::providers::Fixture::default(), &draft)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())
-    }
+pub async fn submit_job(
+    library: State<'_, Library>,
+    state: State<'_, crate::Account>,
+    draft: Submission,
+) -> Result<String, String> {
+    let library = library.inner().clone();
     #[cfg(not(feature = "fixture-provider"))]
-    {
-        let _ = (library, draft);
-        Err("Image generation is available in the test-provider build.".into())
-    }
+    let key = crate::account(&state)?.resolve()?;
+    #[cfg(feature = "fixture-provider")]
+    let _ = state;
+    tauri::async_runtime::spawn_blocking(move || {
+        #[cfg(not(feature = "fixture-provider"))]
+        let provider = crate::providers::openai::OpenAi::new(key)?;
+        #[cfg(feature = "fixture-provider")]
+        let provider = crate::providers::Fixture::default();
+        crate::jobs::submit(&library, &provider, &draft).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[tauri::command]
 pub async fn export_image(library: State<'_, Library>, id: String) -> Result<bool, String> {
