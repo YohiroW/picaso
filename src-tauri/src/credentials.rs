@@ -15,6 +15,7 @@ pub struct Status {
     pub environment: bool,
     pub keychain: bool,
     pub keychain_error: bool,
+    pub preference_error: bool,
 }
 
 pub trait Vault {
@@ -97,14 +98,16 @@ impl<V: Vault> Credentials<V> {
     }
     pub fn status(&self) -> Result<Status, String> {
         let key = self.vault.get();
+        let source = self.selected();
         Ok(Status {
-            selected: self.selected()?,
+            preference_error: source.is_err(),
+            selected: source.ok().flatten(),
             environment: self.environment.is_some(),
             keychain: matches!(&key, Ok(Some(_))),
             keychain_error: key.is_err(),
         })
     }
-    fn from_source(&self, source: Source) -> Result<String, String> {
+    fn read_source(&self, source: Source) -> Result<String, String> {
         let key = match source {
             Source::Environment => self.environment.clone(),
             Source::Keychain => self.vault.get()?,
@@ -112,13 +115,13 @@ impl<V: Vault> Credentials<V> {
         key.ok_or_else(|| "Your selected key is unavailable. Open Key settings to restore it or choose another source.".into())
     }
     pub fn resolve(&self) -> Result<String, String> {
-        self.from_source(
+        self.read_source(
             self.selected()?
                 .ok_or("Choose a key in Key settings first.")?,
         )
     }
     pub fn select(&self, source: Source) -> Result<Status, String> {
-        self.from_source(source)?;
+        self.read_source(source)?;
         self.remember(source)
     }
     pub fn save(&self, key: &str) -> Result<Status, String> {

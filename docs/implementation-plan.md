@@ -1,6 +1,8 @@
 # Picaso v0.1 实现计划：从安装包到第二张图
 
-**发布标准：** 给一位没有开发环境的 Apple Silicon Mac 用户一个 `.dmg`。他能看懂密钥来自哪里、用自己的额度生成第一张图，重开后选中这张图改出第二张；覆盖升级后两张都在。需求以[首版基线](requirements.md)为准。M0 的实际结果见[安装验证记录](m0-macos.md)，M1–M5 为后续工作。
+**原定公开发布标准：** 给一位没有开发环境的 Apple Silicon Mac 用户一个 `.dmg`。他能看懂密钥来自哪里、用自己的额度生成第一张图，重开后选中这张图改出第二张；覆盖升级后两张都在。需求以[首版基线](requirements.md)为准。M0 的实际结果见[安装验证记录](m0-macos.md)，M1–M4 已实现，M5 按本次约定交付本机验证的开发版，结果见[开发版验收](development-build.md)。
+
+本次 M5 验收范围已调整为 Apple Silicon 本地开发版。使用真实生成和历史编辑产生的数据验证覆盖升级，检查本地签名与 DMG，交付校验值和使用说明。Developer ID、公证、干净机器与独立用户验收留待将来决定正式分发时进行。
 
 ## 里程碑与验收
 
@@ -30,7 +32,7 @@ M0 是第一个决策点：先验证选择 Tauri 所期待的分发收益。M2�
 ## 发布前的验证与范围
 
 - **自动化：** Rust 测凭据来源优先级、模型能力、任务去重、SQLite 迁移和引用关系；HTTP 替身测 OpenAI 协议；React 用 Vitest 测引导状态及「选图不提交」。`cargo test`、前端类型检查/测试和 release 构建通过，才能出候选包。
-- **人工验证：** 干净 Apple Silicon Mac；从 Finder和从带临时环境变量的终端分别启动；用旧版测试数据覆盖升级；验证有/无网络情况下均可查看旧图。签名凭据、验证机和真实 API 冒烟测试的授权是发行前置条件，不是本地开发前置条件。
+- **人工验证：** 干净 Apple Silicon Mac；从 Finder 和从带临时环境变量的终端分别启动；用旧版测试数据覆盖升级；验证有/无网络情况下均可查看旧图。签名凭据、验证机和真实 API 冒烟测试的授权是发行前置条件，不是本地开发前置条件。
 - **首版不做：** 第二个生产供应商、任意 Base URL、账号/云同步、Agent 对话、遮罩画板、批量队列、流式预览、自动更新、独立网页版。升级先支持手动覆盖安装；首个目标为 Apple Silicon macOS；Windows x64 的安装体验在该平台单独验证。
 
 参考：[Tauri Windows 安装与 WebView2 策略](https://v2.tauri.app/distribute/windows-installer/) · [Tauri capabilities](https://v2.tauri.app/security/capabilities/) · [Windows 用户范围 DPAPI](https://learn.microsoft.com/en-us/windows/win32/api/dpapi/nf-dpapi-cryptprotectdata) · [OpenAI 图像接口指南](https://developers.openai.com/api/docs/guides/image-generation) · [两个本地项目的源码走读](research/history-edit-architecture.md)。

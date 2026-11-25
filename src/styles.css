@@ -66,3 +66,5 @@ textarea { resize: vertical; min-height: 76px; }
 .reference { display: flex; gap: 9px; align-items: center; padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--accent); font-size: .87rem; }
 .reference img { width: 40px; height: 40px; object-fit: cover; }
 .reference button { margin-left: auto; }
+.details summary { cursor: pointer; color: #555148; width: fit-content; font-size: .9rem; }
+.details p.job-prompt { font-size: 1rem; color: var(--ink); overflow-wrap: anywhere; white-space: pre-wrap; }

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Workspace } from "./Workspace";
 import { desktop, type Job } from "../../lib/desktop";
 
 const original: Job = {
+  parameters: {size: "1024x1024", quality:"low",output_format:"png"},
   id: "A", images: ["a1","a2"], prompt: "Picaso icon", created: 1,
   provider: "fixture", model: "fixture", status: "succeeded", message: null, inputId: null,
 };
@@ -40,4 +41,15 @@ it("holds a draft when the selected model cannot edit", async () => {
   await user.click(screen.getByRole("button",{name:"Apply edit"}));
   expect(request).not.toHaveBeenCalled();
   expect((screen.getByLabelText("Edit instructions") as HTMLTextAreaElement).value).toBe("Add a copper edge");
+});
+
+it("does not submit an edit while an input method is composing text", async () => {
+  const { request } = await openWorkspace();
+  const input = screen.getByLabelText("Edit instructions");
+  fireEvent.change(input, {target: {value:"保留折纸纹理"}});
+  fireEvent.keyDown(input, {key:"Enter", metaKey:true, isComposing:true, keyCode:229});
+  expect(request).not.toHaveBeenCalled();
+  fireEvent.keyDown(input, {key:"Enter", metaKey:true, isComposing:false});
+  await waitFor(() => expect(request).toHaveBeenCalledOnce());
+  expect(request.mock.calls[0][0].prompt).toBe("保留折纸纹理");
 });

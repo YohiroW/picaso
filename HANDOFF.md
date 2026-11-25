@@ -6,7 +6,7 @@
 
 1. [需求基线](docs/requirements.md) 定义产品行为和平台顺序。
 2. [实施计划](docs/implementation-plan.md) 定义 M0–M5 的交付与验收条件。
-3. [macOS M0 安装记录](docs/m0-macos.md) 提供构建命令、包体、签名状态和实际验证范围。此阶段无需 OpenAI Key。
+3. [macOS M0 安装记录](docs/m0-macos.md) 提供构建命令、包体、签名状态和实际验证范围。此阶段无需 OpenAI Key。当前开发版安装与测试结果见[开发版验收](docs/development-build.md)，操作流程见[使用说明](README.md)。
 4. 设计后续工作台时参考[历史单图继续修改的源码走读](docs/research/history-edit-architecture.md)和[Field 布局指引](refs/design-guidance/arknights-techwear-frontend/SKILL.md)。后续的密钥来源、任务去重和单图修改应使用假数据测试。
 
 Windows x64 当前用户 NSIS 及 WebView2 安装体验仍需在 Windows 平台单独验收。

@@ -1,3 +1,4 @@
+import { Label } from "../../components/ui/label";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { desktop, imageURL, type CredentialStatus, type Job, type Model } from "../../lib/desktop";
 
@@ -17,7 +18,7 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
   const available = model?.provider === "fixture" || !!(status.selected && status[status.selected]);
 
   function select(job: Job | undefined, image?: string) {
-    setSelectedId(job?.id); setImageId(image ?? job?.images[0]); setNotice("");
+    setError(""); setSelectedId(job?.id); setImageId(image ?? job?.images[0]); setNotice("");
   }
   useEffect(() => {
     let active = true;
@@ -56,7 +57,11 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
       {imageId ? <img className="original" key={imageId} src={imageURL(imageId)} alt={selected?.prompt ?? "Selected image"} onError={() => setError("The original image is missing. Restore it or choose another image.")}/> :
         <div className="empty"><h1>{selected ? "Task details" : "Create your first image"}</h1><p>{selected?.message ?? "Describe what you want to make below."}</p></div>}
     </section>
-    {selected && <div className="details"><h2>{selected.prompt}</h2><p>{selected.provider} · {selected.model}</p>
+    {selected && <div className="details"><details key={selected.id}>
+      <summary>Prompt and settings</summary>
+      <p className="job-prompt">{selected.prompt}</p>
+      <small>{selected.provider === "openai" ? "OpenAI" : selected.provider} · {selected.model} · {selected.parameters.size} · {selected.parameters.quality} · {selected.parameters.output_format.toUpperCase()}</small>
+    </details>
       {selected.images.length > 1 && <div className="variants">{selected.images.map((id,i) => <button key={id} aria-pressed={id === imageId} aria-label={`Select image ${i+1}`} onClick={() => select(selected,id)}><img alt="" src={imageURL(id)} /></button>)}</div>}
       {imageId && <div className="actions"><button disabled={busy} onClick={() => {
         setReference(imageId); setError(""); setNotice(""); promptField.current?.focus();
@@ -64,7 +69,7 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
     <form className="composer" onSubmit={submit}>
       {reference && <div className="reference"><img src={imageURL(reference)} alt="Selected original for editing" /><span>Reference image</span><button type="button" disabled={busy} onClick={() => setReference(undefined)}>Remove reference</button></div>}
       {reference && model && !model.canEdit && <p role="alert">This model cannot edit a reference. Remove it to generate a new image.</p>}
-      <label htmlFor="prompt">{reference ? "Edit instructions" : "Image prompt"}</label>
+      <Label htmlFor="prompt">{reference ? "Edit instructions" : "Image prompt"}</Label>
       <textarea ref={promptField} id="prompt" onKeyDown={e => {
         if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
           e.preventDefault(); e.currentTarget.form?.requestSubmit();

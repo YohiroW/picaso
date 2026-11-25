@@ -104,3 +104,102 @@ fn unsupported_model_rejects_edits_before_calling_the_provider() {
     assert!(error.to_string().contains("cannot edit"));
     assert!(lib.history().unwrap().is_empty());
 }
+
+#[test]
+fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
+    use crate::providers::{Failure, Model, Output};
+    struct Interrupted;
+    impl Provider for Interrupted {
+        fn model(&self) -> Model {
+            Fixture::default().model()
+        }
+        fn render(&self, _: &str, _: Option<&[u8]>) -> Result<Output, Failure> {
+            panic!("simulate exit after dispatch")
+        }
+    }
+    let root = tempfile::tempdir().unwrap();
+    let lib = Library::open(root.path()).unwrap();
+    let fixture = Fixture::default();
+    submit(&lib, &fixture, &Submission::new("Finished icon")).unwrap();
+    let old = lib.history().unwrap().remove(0);
+    let draft = Submission::new("Interrupted request");
+    assert!(std::panic::catch_unwind(|| submit(&lib, &Interrupted, &draft)).is_err());
+    let orphan = root
+        .path()
+        .join("originals")
+        .join(format!("{}.png", Uuid::new_v4()));
+    std::fs::write(&orphan, b"uncommitted file").unwrap();
+    let temp = root.path().join("originals/.picaso-tmp-interrupted");
+    std::fs::write(&temp, b"partial file").unwrap();
+    assert!(Library::open(root.path()).is_err());
+    drop(lib);
+    let reopened = Library::open(root.path()).unwrap();
+    let interrupted = reopened.history().unwrap().remove(0);
+    assert_eq!(interrupted.status, "unconfirmed");
+    assert!(interrupted.message.unwrap().contains("another charge"));
+    assert!(!orphan.exists() && !temp.exists());
+    assert_eq!(
+        reopened.original(&old.images[0]).unwrap(),
+        include_bytes!("../../icons/icon.png")
+    );
+    assert!(submit(&reopened, &fixture, &draft).is_err());
+    assert_eq!(fixture.calls.get(), 1);
+}
+
+#[test]
+fn a_newer_database_is_left_intact() {
+    let root = tempfile::tempdir().unwrap();
+    let db = rusqlite::Connection::open(root.path().join("library.sqlite3")).unwrap();
+    db.pragma_update(None, "user_version", 99).unwrap();
+    assert!(Library::open(root.path()).is_err());
+    assert_eq!(
+        db.pragma_query_value(None, "user_version", |r| r.get::<_, u32>(0))
+            .unwrap(),
+        99
+    );
+}
+
+#[test]
+fn duplicate_in_flight_request_does_not_invoke_a_second_provider() {
+    use crate::providers::{Failure, Model, Output};
+    use std::sync::mpsc;
+    struct Held {
+        started: mpsc::Sender<()>,
+        resume: mpsc::Receiver<()>,
+    }
+    impl Provider for Held {
+        fn model(&self) -> Model {
+            Fixture::default().model()
+        }
+        fn render(&self, p: &str, input: Option<&[u8]>) -> Result<Output, Failure> {
+            self.started.send(()).unwrap();
+            self.resume.recv().unwrap();
+            Fixture::default().render(p, input)
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let library = Library::open(dir.path()).unwrap();
+    let draft = Submission::new("One submission");
+    std::thread::scope(|scope| {
+        let (started, rx) = mpsc::channel();
+        let (resume, wait) = mpsc::channel();
+        let worker = scope.spawn(|| {
+            submit(
+                &library,
+                &Held {
+                    started,
+                    resume: wait,
+                },
+                &draft,
+            )
+        });
+        rx.recv_timeout(std::time::Duration::from_secs(5)).unwrap();
+        let other = Fixture::default();
+        let duplicate = submit(&library, &other, &draft);
+        resume.send(()).unwrap();
+        worker.join().unwrap().unwrap();
+        assert!(duplicate.is_err());
+        assert_eq!(other.calls.get(), 0);
+    });
+    assert_eq!(library.history().unwrap().len(), 1);
+}

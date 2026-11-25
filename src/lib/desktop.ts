@@ -6,10 +6,12 @@ export interface CredentialStatus {
   environment: boolean;
   keychain: boolean;
   keychainError: boolean;
+  preferenceError?: boolean;
 }
 export interface Model { provider: string; id: string; canEdit: boolean }
 export interface Job {
   id: string; prompt: string; provider: string; model: string; images: string[];
+  parameters: {size: string; quality: string; output_format: string};
   status: string; message: string | null; inputId: string | null; created: number;
 }
 export const imageURL = (id: string) => convertFileSrc(id, "picaso-image");

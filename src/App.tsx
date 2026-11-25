@@ -10,17 +10,21 @@ export function App() {
   const [error, setError] = useState("");
   function load() {
     setError("");
-    desktop.status().then(next => { setStatus(next); setSettings(!next.selected); }).catch(e => setError(String(e)));
+    desktop.status().then(next => { setStatus(next); setSettings(!next.selected && !next.preferenceError); }).catch(e => setError(String(e)));
   }
   useEffect(load, []);
+  function openSettings() {
+    setSettings(true);
+    desktop.status().then(setStatus).catch(e => setError(String(e)));
+  }
   return <>
     <header className="appbar"><div className="brand"><img src={icon} alt="" width="28" height="28" />Picaso</div>
-      {status && !settings && <button onClick={() => setSettings(true)}>Key settings</button>}
+      {status && !settings && <button onClick={openSettings}>Key settings</button>}
     </header>
     {!status ? <main><p role="status">{error || "Opening Picaso…"}</p>{error && <button onClick={load}>Try again</button>}</main> :
       <>
         {settings && <KeySettings status={status} onChange={setStatus} onClose={() => setSettings(false)} />}
-        <div hidden={settings}><Workspace status={status} openSettings={() => setSettings(true)} /></div>
+        <div hidden={settings}><Workspace status={status} openSettings={openSettings} /></div>
       </>}
   </>;
 }
