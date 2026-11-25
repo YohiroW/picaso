@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en" data-direction="field">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Material Library — Design specimen</title>
+  <link rel="stylesheet" href="tokens.css">
+  <style>
+    .skip { position: fixed; z-index: 5; top: 8px; left: 8px; padding: 12px; background: var(--surface); transform: translateY(-160%); }
+    .skip:focus { transform: none; }
+    .shell { display: grid; grid-template-columns: 112px minmax(0,1fr); min-height: 100vh; }
+    .rail { background: var(--rail); color: var(--rail-ink); padding: 28px 14px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 56px; }
+    .brand { text-decoration: none; font-weight: 800; font-size: 18px; line-height: 1.1; letter-spacing: -.06em; }
+    .brand-mark { width: 36px; height: 36px; display: block; background: currentColor; clip-path: polygon(0 0,40% 0,40% 60%,60% 60%,60% 0,100% 0,100% 100%,0 100%); margin-bottom: 12px; }
+    .rail nav { display: grid; gap: 8px; }
+    .rail nav a { display: block; padding: 12px 6px; font-size: 13px; text-decoration: none; border-left: 3px solid transparent; }
+    .rail nav a[aria-current] { border-color: var(--rail-ink); font-weight: 700; }
+    .rail-note { margin-top: auto; font-size: 12px; line-height: 1.5; }
+    main { min-width: 0; padding: 0 40px; }
+    .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 20px; min-height: 88px; border-bottom: 1px solid var(--line); }
+    .topbar > p { font-size: 13px; margin: 0; }
+    .direction { margin: 0; border: 0; padding: 0; display: flex; align-items: center; gap: 14px; }
+    .direction legend { float: left; margin-right: 14px; font-size: 12px; color: var(--muted); }
+    .direction label { position: relative; font-size: 13px; cursor: pointer; }
+    .direction input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .direction span { display: block; padding: 10px 6px; border-bottom: 3px solid transparent; }
+    .direction input:checked + span { border-color: var(--ink); font-weight: 700; }
+    .direction input:focus-visible + span { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .hero { display: grid; grid-template-columns: 1.1fr 1fr; gap: 32px; align-items: stretch; padding: 40px 0; }
+    .hero-copy { display: flex; flex-direction: column; align-items: flex-start; }
+    h1 { font-family: var(--font-display); font-size: clamp(3rem,7.2vw,7rem); font-weight: 900; line-height: .94; letter-spacing: -.035em; text-transform: uppercase; margin: 0 0 24px; }
+    .hero-copy p { color: var(--muted); max-width: 34ch; margin: 0 0 28px; }
+    .hero-copy .action { margin-top: auto; }
+    .diagram { position: relative; display: grid; align-content: center; min-height: 290px; padding: 34px 24px; color: var(--figure-ink); background: var(--figure); }
+    .diagram::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: linear-gradient(currentColor 1px,transparent 1px),linear-gradient(90deg,currentColor 1px,transparent 1px); background-size: 28px 28px; opacity: .08; }
+    .diagram svg { position: relative; width: 100%; height: auto; }
+    .diagram .slab { fill: var(--figure-surface); stroke: var(--figure-ink); stroke-width: 1.5; }
+    .diagram .marked { fill: var(--accent); stroke: var(--on-accent); stroke-width: 1.5; }
+    .diagram .trace { fill: none; stroke: currentColor; stroke-width: 1.5; }
+    .diagram .faint { opacity: .4; }
+    .diagram text { font: 12px var(--font-data); fill: var(--figure-ink); }
+    .diagram .marked-text { fill: var(--on-accent); font-weight: 700; }
+    .section-head { display: flex; align-items: baseline; gap: 20px; border-top: 2px solid var(--ink); padding-top: 16px; }
+    h2 { font-size: 20px; line-height: 1.3; margin: 0; letter-spacing: -.02em; }
+    .section-head .data { font-size: 13px; margin-left: auto; }
+    .filters { display: grid; grid-template-columns: minmax(0,1fr) 190px auto; gap: 12px; align-items: end; padding: 22px 0; }
+    .field { display: grid; gap: 6px; min-width: 0; }
+    .field label { font-size: 13px; }
+    .filters input { width: 100%; }
+    .plain { padding: .6rem 1rem; min-height: 44px; border: 1px solid var(--control-line); background: transparent; color: var(--ink); font-size: 14px; }
+    .plain:hover { background: var(--surface); }
+    .resources { display: grid; grid-template-columns: minmax(0,1fr) 240px; gap: 32px; align-items: start; }
+    .resource-list { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--line); }
+    .resource-list li { border-bottom: 1px solid var(--line); }
+    .resource-row { width: 100%; min-height: 84px; display: grid; grid-template-columns: 32px minmax(0,1fr) 84px 20px; gap: 14px; align-items: center; padding: 16px 12px; color: var(--ink); background: transparent; border: 0; text-align: left; border-left: 3px solid transparent; }
+    .resource-row:hover { background: var(--surface); border-left-color: var(--ink); }
+    .resource-row .data { font-size: 12px; color: var(--muted); }
+    .resource-row strong { font-size: 16px; font-weight: 600; display: block; }
+    .resource-row small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .resource-row .category { font-size: 12px; color: var(--muted); }
+    .resource-row:focus-visible { outline-offset: -4px; }
+    .arrow { color: var(--signal-ink); font-size: 20px; }
+    .reading { background: var(--surface); border-top: 5px solid var(--ink); padding: 20px; }
+    .reading h3 { font-size: 18px; line-height: 1.35; margin: 0 0 16px; }
+    .reading p { font-size: 14px; margin: 0 0 16px; color: var(--muted); }
+    .reading ol { padding-left: 18px; font-size: 14px; margin: 0; }
+    .reading li + li { margin-top: 10px; }
+    .reading a { text-decoration-thickness: 1px; }
+    .empty { padding: 36px 12px; border-block: 1px solid var(--line); }
+    .principles { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 28px; margin: 48px 0 32px; border-top: 1px solid var(--line); padding-top: 24px; }
+    .principles h3 { font-size: 16px; margin: 0 0 8px; }
+    .principles p { font-size: 14px; margin: 0; color: var(--muted); max-width: 38ch; }
+    footer { border-top: 1px solid var(--line); padding: 16px 0 24px; color: var(--muted); font-size: 12px; }
+    dialog { width: min(620px,calc(100% - 32px)); max-height: calc(100dvh - 40px); padding: 0; color: var(--ink); background: var(--surface); border: 1px solid var(--control-line); }
+    dialog::backdrop { background: rgb(0 0 0 / .65); }
+    .dialog-head { display: flex; gap: 16px; justify-content: space-between; align-items: start; padding: 24px; border-bottom: 1px solid var(--line); }
+    .dialog-head h2 { margin-top: 8px; font-size: 30px; font-family: var(--font-display); }
+    .dialog-head .data { font-size: 12px; color: var(--muted); }
+    .dialog-body { padding: 24px; }
+    .dialog-body p { margin: 0 0 20px; }
+    .dialog-body ul { margin: 0; padding-left: 20px; }
+    .dialog-body li + li { margin-top: 12px; }
+    [hidden] { display: none !important; }
+    [data-direction="archive"] .hero { grid-template-columns: 1fr 1.15fr; }
+    [data-direction="archive"] .diagram { border: 1px solid var(--line); }
+    [data-direction="archive"] .section-head { border-top-color: var(--accent); }
+    [data-direction="hybrid"] .reading { color: var(--rail-ink); background: var(--rail); border-color: var(--accent); }
+    [data-direction="hybrid"] .reading p { color: #bbc9bd; }
+    @media (min-width: 901px) { [data-direction="field"] .diagram { border-right: 14px solid var(--accent); } }
+    @media (max-width: 1050px) { main { padding-inline: 28px; } .resources { grid-template-columns: minmax(0,1fr) 210px; gap: 20px; } }
+    @media (max-width: 900px) {
+      .shell { display: block; }
+      .rail { flex-direction: row; align-items: center; justify-content: space-between; padding: 16px 28px; border-right: 0; border-bottom: 1px solid var(--line); gap: 20px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+      .brand-mark { flex: 0 0 28px; width: 28px; height: 28px; margin: 0; }
+      .rail nav { display: flex; } .rail nav a { padding: 8px; } .rail-note { display: none; }
+      h1 { font-size: clamp(3.8rem,9vw,6rem); }
+      .resources { grid-template-columns: 1fr; } .reading { padding: 20px; } .reading ol { display: flex; flex-wrap: wrap; gap: 12px 36px; } .reading li + li { margin: 0; }
+    }
+    @media (max-width: 600px) {
+      main { padding-inline: 20px; } .rail { padding: 14px 20px; } .rail nav a { font-size: 12px; }
+      .topbar { padding-block: 16px; gap: 8px; } .topbar > p { width: 100%; } .direction { gap: 10px; }
+      .hero, [data-direction="archive"] .hero { grid-template-columns: 1fr; padding-block: 28px; gap: 24px; }
+      h1 { font-size: clamp(3rem,15vw,4.4rem); } .hero-copy p { margin-bottom: 20px; } .diagram { min-height: 200px; padding: 18px; }
+      .filters { grid-template-columns: minmax(0,1fr) auto; } .field-search { grid-column: 1/-1; }
+      .resource-row { grid-template-columns: 24px minmax(0,1fr) 16px; gap: 10px; padding-inline: 6px; }
+      .resource-row .category { display: none; }
+      .principles { grid-template-columns: 1fr; gap: 24px; margin-top: 32px; }
+      .section-head { gap: 12px; } h2 { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <a href="#library" class="skip">Skip to library</a>
+  <div class="shell">
+    <aside class="rail">
+      <a class="brand" href="#top" aria-label="Material Library home"><span class="brand-mark" aria-hidden="true"></span><span>Material<br>Library</span></a>
+      <nav aria-label="Page sections"><a href="#library" aria-current="location">Browse</a><a href="#principles">Principles</a></nav>
+      <p class="rail-note">Design<br>specimen</p>
+    </aside>
+    <main id="top">
+      <header class="topbar">
+        <p>Resources for interface design</p>
+        <fieldset class="direction"><legend>Direction</legend>
+          <label><input type="radio" name="direction" value="archive"><span>Archive</span></label>
+          <label><input type="radio" name="direction" value="field" checked><span>Field</span></label>
+          <label><input type="radio" name="direction" value="hybrid"><span>Hybrid</span></label>
+        </fieldset>
+      </header>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <h1 id="page-title">Material<br>Library</h1>
+          <p>Practical patterns for layouts, type and components that work together.</p>
+          <button class="action" data-open="layout"><span>Explore modular layout <span aria-hidden="true">↗</span></span></button>
+        </div>
+        <div class="diagram">
+          <svg viewBox="0 0 460 265" role="img" aria-labelledby="diagram-title diagram-desc">
+            <title id="diagram-title">A modular workspace</title><desc id="diagram-desc">A shared frame connects navigation, the content workspace and a removable detail panel.</desc>
+            <path class="trace faint" stroke-dasharray="4 5" d="M42 42H428V220H42Z M42 22V240 M428 22V240"/>
+            <path class="slab" d="M18 64H325V236H18Z"/>
+            <path class="slab" d="M46 42H352V214H46Z"/>
+            <path class="slab" d="M74 20H380V192H74Z"/>
+            <path class="trace" d="M74 49H380 M116 49V192"/>
+            <path class="trace faint" d="M86 68H104 M86 83H104 M86 98H104 M130 141H254 M130 155H220 M130 169H240"/>
+            <path class="marked" d="M130 68H258V121H130Z"/>
+            <text class="marked-text" x="144" y="100">WORKSPACE</text>
+            <path class="slab" d="M294 78H441V224H294Z"/>
+            <path class="trace" d="M294 110H441 M310 132H423 M310 147H397 M310 162H413"/>
+            <text x="308" y="99">DETAIL</text>
+            <path class="trace" d="M258 95H280V151H294"/>
+            <circle cx="280" cy="95" r="3" fill="currentColor"/>
+          </svg>
+        </div>
+      </section>
+      <section id="library" aria-labelledby="library-title">
+        <div class="section-head"><h2 id="library-title">Browse resources</h2><span class="data" id="count" role="status" aria-live="polite">6 resources</span></div>
+        <div class="filters">
+          <div class="field field-search"><label for="search">Search resources</label><input class="control" id="search" type="search" autocomplete="off"></div>
+          <div class="field"><label for="category">Category</label><select class="control" id="category"><option value="all">All categories</option><option>Layout</option><option>Type</option><option>Components</option></select></div>
+          <button class="plain" id="clear">Clear</button>
+        </div>
+        <div class="resources">
+          <div><ul class="resource-list" id="resource-list"></ul><p class="empty" id="empty" hidden>No resources found. Try another search or clear filters.</p></div>
+          <aside class="reading" aria-labelledby="reading-title"><h3 id="reading-title">Start with the structure.</h3><p>A short reading path from the page frame to its smallest controls.</p><ol><li><a href="#library" data-open="layout">Modular layout</a></li><li><a href="#library" data-open="type">Type hierarchy</a></li><li><a href="#library" data-open="states">Visible states</a></li></ol></aside>
+        </div>
+      </section>
+      <section id="principles" class="principles" aria-label="Design principles">
+        <div><h3>Structure before texture</h3><p>Align the content first. Add graphic details where they clarify a boundary or relationship.</p></div>
+        <div><h3>Color carries a signal</h3><p>Give emphasis a consistent purpose. Pair state colors with text or a visible shape.</p></div>
+        <div><h3>Adapt around the task</h3><p>Reorder and fold secondary modules on smaller screens. Keep the main action within reach.</p></div>
+      </section>
+      <footer>Original design specimen · Sample resources</footer>
+    </main>
+  </div>
+  <dialog id="detail" aria-labelledby="detail-title">
+    <div class="dialog-head"><div><span class="data" id="detail-category"></span><h2 id="detail-title"></h2></div><form method="dialog"><button class="plain" autofocus>Close</button></form></div>
+    <div class="dialog-body"><p id="detail-intro"></p><ul id="detail-points"></ul></div>
+  </dialog>
+  <script>
+    const resources = [
+      {id:'layout', title:'Modular layout', category:'Layout', summary:'A frame that opens around the task.', intro:'Give each region a job before giving it a visual treatment.', points:['Keep navigation, the workspace and object details on shared alignment lines.','Open detail panels for the selected object; fold them into the document flow on small screens.','Use boundaries to explain groups, rather than placing every item inside an identical card.']},
+      {id:'type', title:'Type hierarchy', category:'Type', summary:'Display, reading and data in balance.', intro:'Different text roles need different proportions, not a new typeface for every component.', points:['Use a strong display face for short headings; keep body text at a comfortable reading width.','Use tabular figures for aligned values. Keep long descriptions in a normal-width sans serif.','Check long titles and translated text before fixing a container height.']},
+      {id:'signal', title:'Signal color', category:'Components', summary:'Emphasis with a consistent purpose.', intro:'A bright surface attracts attention. Use it for a useful destination or action.', points:['Separate accent surfaces from readable accent text and keyboard focus tokens.','Pair selection with a border, mark or label so color is never its only cue.','Use dark text on a bright yellow surface and check contrast on each theme.']},
+      {id:'density', title:'Responsive density', category:'Layout', summary:'Rearrange the modules, preserve the task.', intro:'A narrow screen changes the available structure, not the importance of the content.', points:['Keep the title, primary action and filters before the content in document order.','Wrap toolbars and bring object details into an accessible inline panel or dialog.','Remove background marks before removing useful information.']},
+      {id:'states', title:'Visible states', category:'Components', summary:'Clear focus, selection and feedback.', intro:'A useful control explains both what can happen and what just happened.', points:['Show keyboard focus outside decorative clipping and leave room around controls.','Tie loading indicators to real work and preserve a recovery path when a request fails.','Provide a clear empty-result message and a way to reset filters.']},
+      {id:'reading', title:'Reading rhythm', category:'Type', summary:'Space that supports scanning and depth.', intro:'Make it easy to scan a list, then settle into a longer description.', points:['Align dates, category labels and titles on repeated baselines.','Use comfortable line height and normal letter spacing for body text.','Keep textures outside paragraphs and data fields.']}
+    ];
+    const list = document.getElementById('resource-list');
+    const search = document.getElementById('search');
+    const category = document.getElementById('category');
+    const dialog = document.getElementById('detail');
+    function render() {
+      const query = search.value.trim().toLocaleLowerCase();
+      const filtered = resources.filter(r => (category.value === 'all' || r.category === category.value) && `${r.title} ${r.summary} ${r.category}`.toLocaleLowerCase().includes(query));
+      list.replaceChildren(...filtered.map(r => {
+        const item = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button'; button.className = 'resource-row'; button.dataset.open = r.id;
+        const number = document.createElement('span'); number.className = 'data'; number.textContent = String(resources.indexOf(r) + 1).padStart(2,'0'); number.setAttribute('aria-hidden','true');
+        const copy = document.createElement('span');
+        const title = document.createElement('strong'); title.textContent = r.title;
+        const summary = document.createElement('small'); summary.textContent = r.summary;
+        copy.append(title,summary);
+        const kind = document.createElement('span'); kind.className = 'category'; kind.textContent = r.category;
+        const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '↗'; arrow.setAttribute('aria-hidden','true');
+        button.setAttribute('aria-label',`${r.title}: ${r.summary} Open details`);
+        button.append(number,copy,kind,arrow); item.append(button); return item;
+      }));
+      document.getElementById('count').textContent = `${filtered.length} ${filtered.length === 1 ? 'resource' : 'resources'}`;
+      document.getElementById('empty').hidden = filtered.length > 0;
+    }
+    function openDetail(id) {
+      const resource = resources.find(r => r.id === id);
+      document.getElementById('detail-category').textContent = resource.category;
+      document.getElementById('detail-title').textContent = resource.title;
+      document.getElementById('detail-intro').textContent = resource.intro;
+      document.getElementById('detail-points').replaceChildren(...resource.points.map(text => { const li = document.createElement('li'); li.textContent = text; return li; }));
+      dialog.showModal();
+    }
+    document.addEventListener('click', event => {
+      const trigger = event.target.closest('[data-open]');
+      if (trigger) { event.preventDefault(); openDetail(trigger.dataset.open); }
+    });
+    document.querySelectorAll('[name="direction"]').forEach(input => input.addEventListener('change', () => { document.documentElement.dataset.direction = input.value; }));
+    search.addEventListener('input',render); category.addEventListener('change',render);
+    document.getElementById('clear').addEventListener('click', () => { search.value = ''; category.value = 'all'; render(); search.focus(); });
+    render();
+  </script>
+</body>
+</html>

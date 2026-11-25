@@ -1,0 +1,6 @@
+{
+  "identifier": "main",
+  "description": "Read installation details in the local Picaso window.",
+  "windows": ["main"],
+  "permissions": ["allow-installation-info"]
+}
