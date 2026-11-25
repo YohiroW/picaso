@@ -1,6 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod commands;
 mod credentials;
+mod jobs;
+mod library;
+mod providers;
+use commands::*;
 use credentials::{Credentials, MacKeychain, Source, Status};
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -59,12 +64,38 @@ fn open_key_portal() -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        .register_asynchronous_uri_scheme_protocol("picaso-image", |context, request, responder| {
+            let library = context
+                .app_handle()
+                .state::<library::Library>()
+                .inner()
+                .clone();
+            let id = request.uri().path().trim_start_matches('/').to_string();
+            tauri::async_runtime::spawn_blocking(move || {
+                let response = match library.original(&id) {
+                    Ok(bytes) => tauri::http::Response::builder()
+                        .header("Content-Type", "image/png")
+                        .body(bytes),
+                    Err(_) => tauri::http::Response::builder()
+                        .status(404)
+                        .body(Vec::new()),
+                };
+                responder.respond(response.expect("static image response"));
+            });
+        })
         .setup(|app| {
             let root = app.path().app_local_data_dir()?;
-            std::fs::create_dir_all(&root)?;
+            #[cfg(feature = "fixture-provider")]
+            let root = root.join("fixture-workspace");
+            app.manage(library::Library::open(&root)?);
+            let account_name = if cfg!(feature = "fixture-provider") {
+                "fixture-api-key"
+            } else {
+                "openai-api-key"
+            };
             app.manage(Mutex::new(Credentials::new(
                 root,
-                MacKeychain("openai-api-key".into()),
+                MacKeychain(account_name.into()),
                 std::env::var("OPENAI_API_KEY").ok(),
             )));
             Ok(())
@@ -75,7 +106,11 @@ fn main() {
             select_source,
             save_key,
             remove_key,
-            open_key_portal
+            open_key_portal,
+            history,
+            current_model,
+            submit_job,
+            export_image
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Picaso");

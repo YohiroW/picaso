@@ -16,3 +16,5 @@ Windows x64 当前用户 NSIS 及 WebView2 安装体验仍需在 Windows 平台�
 [开源项目调研](docs/research/openai-image-apps.md)保留了上游项目、版本和根许可证信息。`refs/` 内含[Claude+ 主题](refs/claude.css)、两个参考项目的只读源码节选及根许可证。解压或迁移工程时保持目录相对位置，按锁文件重建依赖与安装包。
 
 M1、M3 可使用 `impeccable` 检查引导、工作台、键盘焦点与对比度。实现凭据选择、提交去重及历史图编辑时可使用 `tdd`；真实付费冒烟测试仍需单独征得许可。
+
+离线验收图库可运行 `npm run tauri -- dev --features fixture-provider`。点击 “Browse without a key” 进入工作台。此编译选项提供本地测试图片，图库在应用数据目录的 `fixture-workspace/` 下，钥匙串条目也单独命名。

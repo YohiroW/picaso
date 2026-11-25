@@ -6,6 +6,10 @@ fn main() {
         "save_key",
         "remove_key",
         "open_key_portal",
+        "history",
+        "current_model",
+        "submit_job",
+        "export_image",
     ]);
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
         .expect("failed to build Picaso");

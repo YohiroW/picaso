@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type Source = "environment" | "keychain";
 export interface CredentialStatus {
@@ -7,7 +7,17 @@ export interface CredentialStatus {
   keychain: boolean;
   keychainError: boolean;
 }
+export interface Model { provider: string; id: string; canEdit: boolean }
+export interface Job {
+  id: string; prompt: string; provider: string; model: string; images: string[];
+  status: string; message: string | null; inputId: string | null; created: number;
+}
+export const imageURL = (id: string) => convertFileSrc(id, "picaso-image");
 export const desktop = {
+  history: () => invoke<Job[]>("history"),
+  model: () => invoke<Model>("current_model"),
+  submit: (draft: { requestId: string; prompt: string }) => invoke<string>("submit_job", { draft }),
+  export: (id: string) => invoke<boolean>("export_image", { id }),
   status: () => invoke<CredentialStatus>("credential_status"),
   select: (source: Source) => invoke<CredentialStatus>("select_source", { source }),
   save: (key: string) => invoke<CredentialStatus>("save_key", { key }),

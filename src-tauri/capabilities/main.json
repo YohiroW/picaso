@@ -10,6 +10,10 @@
     "allow-select-source",
     "allow-save-key",
     "allow-remove-key",
-    "allow-open-key-portal"
+    "allow-open-key-portal",
+    "allow-history",
+    "allow-current-model",
+    "allow-submit-job",
+    "allow-export-image"
   ]
 }

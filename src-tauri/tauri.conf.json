@@ -11,17 +11,33 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Picaso", "width": 640, "height": 430, "minWidth": 360, "minHeight": 330 }
+      {
+        "label": "main",
+        "title": "Picaso",
+        "width": 1060,
+        "height": 760,
+        "minWidth": 380,
+        "minHeight": 460
+      }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self'"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data: picaso-image: http://picaso-image.localhost; style-src 'self'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
-    "icon": ["icons/icon.png", "icons/icon.icns"],
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/icon.png",
+      "icons/icon.icns"
+    ],
     "category": "GraphicsAndDesign",
-    "macOS": { "minimumSystemVersion": "14.0", "signingIdentity": "-" }
+    "macOS": {
+      "minimumSystemVersion": "14.0",
+      "signingIdentity": "-"
+    }
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { KeySettings } from "./features/onboarding/KeySettings";
 import { desktop, type CredentialStatus } from "./lib/desktop";
+import { Workspace } from "./features/workspace/Workspace";
 import icon from "./assets/picaso.svg";
 
 export function App() {
@@ -17,7 +18,9 @@ export function App() {
       {status && !settings && <button onClick={() => setSettings(true)}>Key settings</button>}
     </header>
     {!status ? <main><p role="status">{error || "Opening Picaso…"}</p>{error && <button onClick={load}>Try again</button>}</main> :
-      settings ? <KeySettings status={status} onChange={setStatus} onClose={() => setSettings(false)} /> :
-      <main><h1>Workspace</h1>{(!status.selected || !status[status.selected]) && <p>Choose an available key in Key settings to create images.</p>}</main>}
+      <>
+        {settings && <KeySettings status={status} onChange={setStatus} onClose={() => setSettings(false)} />}
+        <div hidden={settings}><Workspace status={status} openSettings={() => setSettings(true)} /></div>
+      </>}
   </>;
 }
