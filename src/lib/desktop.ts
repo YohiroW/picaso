@@ -24,6 +24,11 @@ export interface ImageOptions {
 
 export const imageURL = (id: string) => convertFileSrc(id, "picaso-image");
 export const desktop = {
+  importReference: async (file: File) => {
+    if (file.size >= 50_000_000) throw new Error("Choose a reference image smaller than 50 MB.");
+    return invoke<string>("import_reference", await file.arrayBuffer());
+  },
+  discardReference: (id: string) => invoke<void>("discard_reference", { id }),
   history: (recentOnly = false) => invoke<Job[]>("history", { recentOnly }),
   models: () => invoke<Model[]>("available_models"),
   submit: (draft: { requestId: string; model: string; prompt: string; inputId?: string; options: ImageOptions }) => invoke<string>("submit_job", { draft }),

@@ -7,6 +7,8 @@ fn main() {
         "remove_key",
         "open_key_portal",
         "history",
+        "import_reference",
+        "discard_reference",
         "delete_image",
         "current_model",
         "available_models",

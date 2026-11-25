@@ -51,25 +51,44 @@ impl Library {
             _lock: Arc::new(lock),
         };
         let mut conn = lib.connect()?;
+        let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        // Rebuild images with a nullable producing job. Existing jobs reference
+        // this table, so check their foreign keys before committing the rebuild.
+        if (1..=3).contains(&version) {
+            conn.pragma_update(None, "foreign_keys", false)?;
+        }
         let tx = conn.transaction()?;
-        let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
         match version {
             0 => tx.execute_batch("CREATE TABLE jobs (
                 id TEXT PRIMARY KEY, prompt TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
                 status TEXT NOT NULL, parameters TEXT NOT NULL, input_id TEXT REFERENCES images(id),
                 created INTEGER NOT NULL DEFAULT(unixepoch()), message TEXT, usage TEXT);
-                CREATE TABLE images (id TEXT PRIMARY KEY, job TEXT NOT NULL REFERENCES jobs(id), format TEXT NOT NULL DEFAULT 'png');
+                CREATE TABLE images (id TEXT PRIMARY KEY, job TEXT REFERENCES jobs(id), format TEXT NOT NULL DEFAULT 'png', deleted INTEGER NOT NULL DEFAULT 0);
                 CREATE INDEX images_job ON images(job);")?,
             1 => tx.execute_batch("ALTER TABLE images ADD COLUMN format TEXT NOT NULL DEFAULT 'png';")?,
-            2 | 3 => (),
+            2..=4 => (),
             _ => bail!("This library needs a newer version of Picaso."),
         }
-        if version < 3 {
-            tx.execute_batch(
-                "ALTER TABLE images ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
-                              PRAGMA user_version=3;",
-            )?;
+        if (1..=3).contains(&version) {
+            if version < 3 {
+                tx.execute_batch(
+                    "ALTER TABLE images ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;",
+                )?;
+            }
+            tx.execute_batch("CREATE TABLE new_images (id TEXT PRIMARY KEY, job TEXT REFERENCES jobs(id), format TEXT NOT NULL DEFAULT 'png', deleted INTEGER NOT NULL DEFAULT 0);
+                INSERT INTO new_images(rowid,id,job,format,deleted) SELECT rowid,id,job,format,deleted FROM images;
+                DROP TABLE images;
+                ALTER TABLE new_images RENAME TO images;
+                CREATE INDEX images_job ON images(job);")?;
+            if tx.prepare("PRAGMA foreign_key_check")?.exists([])? {
+                bail!("The library contains a missing image or task reference.");
+            }
         }
+        if version < 4 {
+            tx.execute_batch("CREATE INDEX jobs_input ON jobs(input_id); PRAGMA user_version=4;")?;
+        }
+        // Drafts live in the webview. Recover abandoned imports after an exit.
+        tx.execute("DELETE FROM images WHERE job IS NULL AND NOT EXISTS (SELECT 1 FROM jobs WHERE input_id=images.id)", [])?;
         tx.execute(
             "UPDATE jobs SET status='unconfirmed', message=?1 WHERE status='running'",
             [UNCERTAIN],
@@ -150,17 +169,7 @@ impl Library {
         let result = (|| -> Result<()> {
             for data in output.images {
                 format.validate(&data)?;
-                let image_id = Uuid::new_v4().to_string();
-                let path = self
-                    .root
-                    .join("originals")
-                    .join(format!("{image_id}.{}", format.extension()));
-                let mut tmp = tempfile::Builder::new()
-                    .prefix(".picaso-tmp-")
-                    .tempfile_in(self.root.join("originals"))?;
-                tmp.write_all(&data)?;
-                tmp.as_file().sync_all()?;
-                tmp.persist_noclobber(&path)?;
+                let (image_id, path) = self.write_original(&data, format)?;
                 written.push(path);
                 tx.execute(
                     "INSERT INTO images(id,job,format) VALUES (?1,?2,?3)",
@@ -180,6 +189,40 @@ impl Library {
             }
         }
         result
+    }
+    fn write_original(&self, bytes: &[u8], format: Format) -> Result<(String, PathBuf)> {
+        let id = Uuid::new_v4().to_string();
+        let dir = self.root.join("originals");
+        let path = dir.join(format!("{id}.{}", format.extension()));
+        let mut tmp = tempfile::Builder::new()
+            .prefix(".picaso-tmp-")
+            .tempfile_in(dir)?;
+        tmp.write_all(bytes)?;
+        tmp.as_file().sync_all()?;
+        tmp.persist_noclobber(&path)?;
+        Ok((id, path))
+    }
+    pub fn import_reference(&self, bytes: &[u8]) -> Result<String> {
+        let format = Format::reference(bytes)?;
+        let conn = self.connect()?;
+        let (id, path) = self.write_original(bytes, format)?;
+        if let Err(err) = conn.execute(
+            "INSERT INTO images(id,format) VALUES (?1,?2)",
+            params![id, format.extension()],
+        ) {
+            let _ = fs::remove_file(path);
+            return Err(err.into());
+        }
+        Ok(id)
+    }
+    pub fn discard_reference(&self, id: Uuid) -> Result<()> {
+        let ext: Option<String> = self.connect()?.query_row(
+            "DELETE FROM images WHERE id=?1 AND job IS NULL AND NOT EXISTS (SELECT 1 FROM jobs WHERE input_id=?1) RETURNING format",
+            [id.to_string()], |r| r.get(0)).optional()?;
+        if let Some(ext) = ext {
+            self.remove_original(id, &ext)?;
+        }
+        Ok(())
     }
     pub(crate) fn fail(&self, id: &Uuid, message: &str, uncertain: bool) -> Result<()> {
         self.connect()?.execute(
@@ -258,7 +301,10 @@ impl Library {
             )
             .optional()?
             .context("This image is missing from the library.")?;
-        let format = Format::parse(&ext).context("Unknown library image format.")?;
+        self.remove_original(id, &ext)
+    }
+    fn remove_original(&self, id: Uuid, ext: &str) -> Result<()> {
+        let format = Format::parse(ext).context("Unknown library image format.")?;
         let path = self
             .root
             .join("originals")

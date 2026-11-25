@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ClipboardEvent, type FormEvent } from "react";
 import { ImageSettings, optionsError } from "./ImageSettings";
 import { Label } from "../../components/ui/label";
 import { SettingsIcon } from "../../components/SettingsIcon";
@@ -8,7 +8,8 @@ import { Gallery, type GalleryImage } from "./Gallery";
 import { ImagePreview } from "./ImagePreview";
 
 
-type Draft = { prompt: string; modelId?: string; options?: ImageOptions; custom?: boolean };
+type Reference = { id: string; name?: string };
+type Draft = { prompt: string; reference?: Reference; modelId?: string; options?: ImageOptions; custom?: boolean };
 const emptyDraft: Draft = { prompt: "" };
 
 function History({ jobs, open }: { jobs: Job[]; open: (image: GalleryImage) => void }) {
@@ -41,9 +42,12 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   const [revision, refresh] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [preview, setPreview] = useState<GalleryImage>();
-  const [reference, setReference] = useState<string>();
+  const [draftKey, setDraftKey] = useState("new");
   const [unavailableReference, setUnavailableReference] = useState<string>();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({ new: emptyDraft });
+  const previousDrafts = useRef(drafts);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef<string | null>(null);
   const [error, setError] = useState("");
@@ -51,14 +55,14 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   const [mobileEditor, setMobileEditor] = useState(false);
   const promptField = useRef<HTMLTextAreaElement>(null);
   const [focusRequest, setFocusRequest] = useState(0);
-  const draftKey = reference ?? "new";
   const draft = drafts[draftKey] ?? emptyDraft;
+  const reference = draft.reference?.id;
   const model = draft.modelId ? models.find(m=>m.id===draft.modelId) : models[0];
   const options = draft.options ?? model?.defaults;
   const validation = model && options ? optionsError(model,options,!!reference) : undefined;
   const available = model?.provider === "fixture" || !!(status.selected && status[status.selected]);
   const missingReference = !!reference && reference === unavailableReference;
-  const canSubmit = model && options && !validation && available && draft.prompt.trim() && (!reference || model?.canEdit) && !missingReference && !busy;
+  const canSubmit = model && options && !validation && available && draft.prompt.trim() && (!reference || model?.canEdit) && !missingReference && !busy && !importing;
 
   const storedJobs = snapshot?.jobs ?? [];
   const jobs = pending && !storedJobs.some(job => job.id === pending.id) ? [pending, ...storedJobs] : storedJobs;
@@ -97,6 +101,17 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
     if (focusRequest) promptField.current?.focus();
   }, [focusRequest]);
 
+  useEffect(() => {
+    const activeIds = new Set(Object.values(drafts).map(entry => entry.reference?.id));
+    for (const { reference } of Object.values(previousDrafts.current)) {
+      if (reference?.name && !activeIds.has(reference.id)) {
+        // The library keeps inputs already used by a job and retries cleanup at startup.
+        void desktop.discardReference(reference.id).catch(err => console.warn("Reference cleanup failed", err));
+      }
+    }
+    previousDrafts.current = drafts;
+  }, [drafts]);
+
   function focusEditor() {
     setMobileEditor(true);
     setFocusRequest(n => n + 1);
@@ -104,16 +119,53 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   function updateDraft(changes: Partial<Draft>) {
     setDrafts(prev => ({ ...prev, [draftKey]: { ...(prev[draftKey] ?? emptyDraft), ...changes } }));
   }
+  async function attach(file: File) {
+    if (busy || importing) return;
+    setImporting(true);
+    setError("");
+    setNotice("");
+    promptField.current?.focus();
+    try {
+      const id = await desktop.importReference(file);
+      updateDraft({ reference: { id, name: file.name || "Pasted image" } });
+      setUnavailableReference(undefined);
+      if (document.activeElement === fileInput.current || document.activeElement === document.body) {
+        promptField.current?.focus();
+      }
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setImporting(false); }
+  }
+  function pasteReference(event: ClipboardEvent) {
+    const data = event.clipboardData;
+    const files = data.files.length ? Array.from(data.files) :
+      Array.from(data.items).flatMap(item => item.kind === "file" ? item.getAsFile() ?? [] : []);
+    const images = files.filter(file => file.type.startsWith("image/") || /\.(png|jpe?g|webp)$/i.test(file.name));
+    if (!images.length) return;
+    event.preventDefault();
+    if (busy || importing) return;
+    if (images.length > 1) {
+      setError("Paste one reference image at a time.");
+      return;
+    }
+    void attach(images[0]);
+  }
+  function removeReference() {
+    updateDraft({ reference: undefined });
+    setUnavailableReference(undefined);
+    setError("");
+    setNotice("");
+    focusEditor();
+  }
   function newImage() {
-    setReference(undefined);
+    setDraftKey("new");
     setPreview(undefined);
     setError("");
     setNotice("");
     focusEditor();
   }
   function edit(image: GalleryImage) {
-    setDrafts(prev => prev[image.id] ? prev : { ...prev, [image.id]: { ...draft } });
-    setReference(image.id);
+    setDrafts(prev => ({ ...prev, [image.id]: { ...(prev[image.id] ?? draft), reference: { id: image.id } } }));
+    setDraftKey(image.id);
     setUnavailableReference(undefined);
     setPreview(undefined);
     setError("");
@@ -122,8 +174,9 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   }
   function reuse(job: Job) {
     const options = { ...job.parameters, n: job.parameters.n ?? 1, background: job.parameters.background ?? "auto" };
-    setDrafts(prev => ({ ...prev, [job.inputId ?? "new"]: { prompt: job.prompt, modelId: job.model, options } }));
-    setReference(job.inputId ?? undefined);
+    const key = job.inputId ?? "new";
+    setDrafts(prev => ({ ...prev, [key]: { prompt: job.prompt, modelId: job.model, options, reference: job.inputId ? { id: job.inputId } : undefined } }));
+    setDraftKey(key);
     setUnavailableReference(undefined);
     setError(job.message ?? (job.status === "unconfirmed" ? "Submitting again may incur another charge." : ""));
     setNotice("");
@@ -152,11 +205,11 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
       await desktop.submit({ requestId, model: model.id, prompt: draft.prompt, inputId: reference, options });
       setDrafts(prev => {
         const next = { ...prev };
-        if (reference) delete next[reference];
-        else next.new = { ...draft, prompt: "", modelId:model.id, options };
+        if (draftKey !== "new") delete next[draftKey];
+        else next.new = { ...draft, reference: undefined, prompt: "", modelId:model.id, options };
         return next;
       });
-      setReference(undefined);
+      setDraftKey("new");
       setNotice("Saved to your gallery.");
     } catch (e) { setError(String(e)); setNotice(""); }
     finally {
@@ -180,11 +233,11 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
         <form id="image-form" className={mobileEditor ? "editor expanded" : "editor"} onSubmit={submit}>
           <section className="panel-section prompt-section">
             <Label className="section-title" htmlFor="prompt">{reference ? "Edit instructions" : "Prompt"}</Label>
-            <div className="prompt-box">
-              {reference && <div className="reference">
-                {!missingReference && <img src={imageURL(reference)} alt="Reference image" onError={() => setUnavailableReference(reference)}/>}
-                <span>{missingReference ? "Reference image unavailable" : "Reference image"}</span>
-                <button type="button" aria-label="Remove reference" disabled={busy} onClick={newImage}>×</button></div>}
+            <div className="prompt-box" onPaste={pasteReference}>
+              <div aria-live="polite" aria-atomic="true">{reference && <div className="reference">
+                {!missingReference && <img key={reference} src={imageURL(reference)} alt="Reference image" onError={() => setUnavailableReference(reference)}/>}
+                <span title={draft.reference?.name}>{missingReference ? "Reference image unavailable" : draft.reference?.name ?? "Reference image"}</span>
+                <button type="button" aria-label="Remove reference" disabled={busy || importing} onClick={removeReference}>×</button></div>}</div>
               <textarea id="prompt" ref={promptField} value={draft.prompt} disabled={busy} onChange={e => updateDraft({prompt:e.target.value})}
                 placeholder={reference ? "Describe what to change…" : "Describe what you want to see…"}
                 onKeyDown={e => {
@@ -193,7 +246,18 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
                     e.currentTarget.form?.requestSubmit();
                   }
                 }}/>
-              <div className="prompt-footer"><kbd title="Command + Return">⌘ ↩</kbd>
+              <div className="prompt-footer">
+                <input type="file" ref={fileInput} hidden aria-label="Reference image file" accept="image/png,image/jpeg,image/webp" onChange={e => {
+                  const file = e.currentTarget.files?.[0];
+                  e.currentTarget.value = "";
+                  if (file) void attach(file);
+                }}/>
+                <button type="button" className="attach-image" disabled={busy || importing} onClick={() => fileInput.current?.click()}
+                  aria-label={importing ? "Adding image" : reference ? "Replace image" : "Add image"} aria-busy={importing}
+                  title={reference ? "Replace reference image (or paste with ⌘V)" : "Add reference image (or paste with ⌘V)"}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m21 11-9.2 9.2a6 6 0 0 1-8.5-8.5l10-10a4 4 0 0 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.2-9.2"/></svg>
+                </button>
+                <kbd title="Command + Return">⌘ ↩</kbd>
                 <button type="submit" className="primary submit" disabled={!canSubmit}>{busy ? "Creating…" : reference ? (options && options.n>1 ? `Apply edit · ${options.n} images` : "Apply edit") : (options && options.n>1 ? `Generate ${options.n} images` : "Generate image")}<span aria-hidden="true">↑</span></button>
               </div>
             </div>
@@ -216,9 +280,9 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
         {loadError ? <p role="alert">{loadError} <button onClick={() => refresh(n => n + 1)}>Try again</button></p> :
           loading ? <p role="status">Loading images…</p> :
           history ? <History jobs={jobs} open={setPreview}/> :
-          <Gallery jobs={jobs} open={setPreview} create={newImage} reuse={reuse} busy={busy} revealJobId={pending?.id} deleteImage={deleteImage}/>}
+          <Gallery jobs={jobs} open={setPreview} create={newImage} reuse={reuse} busy={busy || importing} revealJobId={pending?.id} deleteImage={deleteImage}/>}
       </section>
     </main>
-    {preview && <ImagePreview key={preview.id} image={preview} close={() => setPreview(undefined)} edit={() => edit(preview)} busy={busy}/>}
+    {preview && <ImagePreview key={preview.id} image={preview} close={() => setPreview(undefined)} edit={() => edit(preview)} busy={busy || importing}/>}
   </>;
 }

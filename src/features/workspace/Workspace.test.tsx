@@ -52,6 +52,75 @@ it("holds a draft when the selected model cannot edit", async () => {
   expect((screen.getByLabelText("Edit instructions") as HTMLTextAreaElement).value).toBe("Add a copper edge");
 });
 
+it("adds a file, replaces it by pasting, and removes it without changing the current prompt or settings", async () => {
+  const {user, request} = await openWorkspace();
+  await user.click(screen.getByRole("button", {name: "New image"}));
+  await user.selectOptions(screen.getByLabelText("Size & orientation"), "1536x1024");
+  await user.selectOptions(screen.getByLabelText("Quality"), "high");
+  const input = screen.getByRole("textbox");
+  await user.click(input);
+  await user.paste(" with shadows");
+  const prompt = "Add a copper edge with shadows";
+  expect(input).toHaveProperty("value", prompt);
+
+  const imported = vi.spyOn(desktop, "importReference").mockResolvedValueOnce("picked").mockResolvedValueOnce("pasted");
+  const discarded = vi.spyOn(desktop, "discardReference").mockResolvedValue(undefined);
+  const file = new File(["file"], "Portrait.jpg", { type: "image/jpeg" });
+  const screenshot = new File(["screenshot"], "Screenshot.png", { type: "image/png" });
+  const picker = screen.getByLabelText("Reference image file");
+  const openPicker = vi.spyOn(picker, "click");
+  const attachButton = screen.getByRole("button", {name: "Add image"});
+  expect(attachButton.textContent).toBe("");
+  await user.click(attachButton);
+  expect(openPicker).toHaveBeenCalledOnce();
+  await user.upload(picker, file);
+  expect(await screen.findByText("Portrait.jpg")).toBeTruthy();
+  expect(screen.getByRole("button", {name: "Replace image"}).textContent).toBe("");
+  expect(document.activeElement).toBe(input);
+  expect(screen.getByRole("img", {name: "Reference image"}).getAttribute("src")).toBe("/image/picked");
+  fireEvent.paste(input, {clipboardData: {files: [], items: [{kind: "file", getAsFile: () => screenshot}]}});
+  expect(await screen.findByText("Screenshot.png")).toBeTruthy();
+  expect(imported.mock.calls).toEqual([[file], [screenshot]]);
+  expect(discarded).toHaveBeenCalledWith("picked");
+  expect(screen.getByRole("img", {name: "Reference image"}).getAttribute("src")).toBe("/image/pasted");
+  expect(request).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", {name: "Apply edit"}));
+  expect(request.mock.calls[0][0]).toMatchObject({inputId: "pasted", prompt, options: {size: "1536x1024", quality: "high"}});
+  expect(await screen.findByText("The original image is missing.")).toBeTruthy();
+  expect(screen.getByText("Screenshot.png")).toBeTruthy();
+  await user.click(screen.getByRole("button", {name: "Remove reference"}));
+  expect(discarded).toHaveBeenCalledWith("pasted");
+  expect(screen.getByLabelText("Prompt")).toHaveProperty("value", prompt);
+  expect(screen.getByLabelText("Size & orientation")).toHaveProperty("value", "1536x1024");
+  expect(screen.getByLabelText("Quality")).toHaveProperty("value", "high");
+  await user.click(screen.getByRole("button", {name: "Generate image"}));
+  expect(request.mock.calls[1][0]).toMatchObject({inputId: undefined, prompt});
+});
+
+it("retains the active gallery draft and original reference if a replacement is rejected", async () => {
+  const {user, request} = await openWorkspace();
+  const input = screen.getByLabelText("Edit instructions");
+  await user.type(input, " and highlights");
+  await user.selectOptions(screen.getByLabelText("Quality"), "medium");
+  let reject!: (reason: string) => void;
+  const imported = vi.spyOn(desktop, "importReference").mockImplementation(() => new Promise((_, fail) => { reject = fail; }));
+  const file = new File(["damaged"], "bad.png", {type: "image/png"});
+  fireEvent.paste(input, {clipboardData: {files: [file, file]}});
+  expect(screen.getByRole("alert").textContent).toContain("one reference image");
+  expect(imported).not.toHaveBeenCalled();
+  fireEvent.paste(input, {clipboardData: {files: [file]}});
+  expect(screen.getByRole("button", {name: "Apply edit"})).toHaveProperty("disabled", true);
+  await user.type(input, "!");
+  fireEvent.keyDown(input, {key: "Enter", metaKey: true});
+  await act(async () => reject("Unreadable image"));
+  expect(screen.getByRole("alert").textContent).toBe("Unreadable image");
+  expect(screen.getByRole("img", {name: "Reference image"}).getAttribute("src")).toBe("/image/a2");
+  await user.click(screen.getByRole("button", {name: "Remove reference"}));
+  expect(screen.getByLabelText("Prompt")).toHaveProperty("value", "Add a copper edge and highlights!");
+  expect(screen.getByLabelText("Quality")).toHaveProperty("value", "medium");
+  expect(request).not.toHaveBeenCalled();
+});
+
 it("copies the full prompt and returns from image-only view to the same original", async () => {
   const { user, request } = await openWorkspace();
   const job = { ...original, prompt: "保留纹理\n  Second line — 完整文本" };

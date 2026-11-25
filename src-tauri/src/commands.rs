@@ -7,6 +7,27 @@ use crate::{
 use tauri::State;
 
 #[tauri::command]
+pub async fn import_reference(
+    library: State<'_, Library>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<String, String> {
+    let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Choose an image file to attach.".into());
+    };
+    let library = library.inner().clone();
+    let bytes = bytes.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        library.import_reference(&bytes).map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+pub fn discard_reference(library: State<Library>, id: uuid::Uuid) -> Result<(), String> {
+    library.discard_reference(id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn history(library: State<Library>, recent_only: Option<bool>) -> Result<Vec<Job>, String> {
     library
         .history(recent_only.unwrap_or(false))

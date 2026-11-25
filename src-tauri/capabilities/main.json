@@ -12,6 +12,8 @@
     "allow-remove-key",
     "allow-open-key-portal",
     "allow-history",
+    "allow-import-reference",
+    "allow-discard-reference",
     "allow-delete-image",
     "allow-current-model",
     "allow-available-models",

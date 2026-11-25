@@ -13,6 +13,22 @@ pub enum Format {
 }
 
 impl Format {
+    pub fn reference(bytes: &[u8]) -> Result<Self> {
+        ensure!(
+            bytes.len() < 50_000_000,
+            "Choose a reference image smaller than 50 MB."
+        );
+        let format = match image::guess_format(bytes).ok() {
+            Some(image::ImageFormat::Png) => Self::Png,
+            Some(image::ImageFormat::Jpeg) => Self::Jpeg,
+            Some(image::ImageFormat::WebP) => Self::Webp,
+            _ => anyhow::bail!("Choose a PNG, JPEG or WebP reference image."),
+        };
+        format
+            .validate(bytes)
+            .context("This image could not be read. Choose another image.")?;
+        Ok(format)
+    }
     pub fn extension(self) -> &'static str {
         match self {
             Self::Png => "png",

@@ -40,6 +40,81 @@ fn write_failure_leaves_a_failed_task_without_outputs() {
 }
 
 #[test]
+fn imported_references_are_private_to_drafts_until_used_by_a_job() {
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::open(root.path()).unwrap();
+    let png = include_bytes!("../../icons/icon.png");
+    assert!(library.import_reference(b"GIF89a").is_err());
+    assert!(library.import_reference(&png[..24]).is_err());
+    assert_eq!(
+        std::fs::read_dir(root.path().join("originals"))
+            .unwrap()
+            .count(),
+        0
+    );
+
+    let discarded = library.import_reference(png).unwrap();
+    library
+        .discard_reference(discarded.parse().unwrap())
+        .unwrap();
+    assert!(library.original(&discarded).is_err());
+    let abandoned = library.import_reference(png).unwrap();
+    let selected = library.import_reference(png).unwrap();
+    assert!(library.history(false).unwrap().is_empty());
+    let mut draft = Submission::new("Keep the original composition");
+    draft.input_id = Some(selected.clone());
+    submit(&library, &Fixture::default(), &draft).unwrap();
+    let result = library.history(false).unwrap().remove(0);
+    assert_eq!(result.images.len(), 1);
+    assert_ne!(result.images[0], selected);
+    assert_eq!(library.original(&result.images[0]).unwrap().bytes, png);
+    library
+        .discard_reference(selected.parse().unwrap())
+        .unwrap();
+    drop(library);
+
+    let library = Library::open(root.path()).unwrap();
+    assert_eq!(library.original(&selected).unwrap().bytes, png);
+    assert!(!root
+        .path()
+        .join("originals")
+        .join(format!("{abandoned}.png"))
+        .exists());
+    assert_eq!(library.history(false).unwrap()[0].input_id, Some(selected));
+}
+
+#[test]
+fn v3_migration_keeps_edit_lineage_output_order_and_deleted_images() {
+    let root = tempfile::tempdir().unwrap();
+    let db = rusqlite::Connection::open(root.path().join("library.sqlite3")).unwrap();
+    db.execute_batch("PRAGMA foreign_keys=ON;
+        CREATE TABLE jobs(id TEXT PRIMARY KEY,prompt TEXT,provider TEXT,model TEXT,status TEXT,parameters TEXT,input_id TEXT REFERENCES images(id),created INTEGER,message TEXT,usage TEXT);
+        CREATE TABLE images(id TEXT PRIMARY KEY,job TEXT NOT NULL REFERENCES jobs(id),format TEXT NOT NULL DEFAULT 'png',deleted INTEGER NOT NULL DEFAULT 0);
+        CREATE INDEX images_job ON images(job);
+        INSERT INTO jobs VALUES('parent','Old prompt','fixture','fixture','succeeded','{}',NULL,1,NULL,NULL);
+        INSERT INTO images(id,job) VALUES('b','parent'),('a','parent');
+        INSERT INTO images VALUES('c','parent','png',1);
+        INSERT INTO jobs VALUES('child','Edit prompt','fixture','fixture','failed','{}','c',2,'failed',NULL);
+        PRAGMA user_version=3;").unwrap();
+    drop(db);
+    let library = Library::open(root.path()).unwrap();
+    let jobs = library.history(false).unwrap();
+    assert_eq!(jobs.len(), 2);
+    assert_eq!(jobs[0].input_id.as_deref(), Some("c"));
+    assert_eq!(jobs[1].images, ["b", "a"]);
+    assert!(library.image_format("c").is_err());
+    let conn = library.connect().unwrap();
+    assert!(!conn
+        .prepare("PRAGMA foreign_key_check")
+        .unwrap()
+        .exists([])
+        .unwrap());
+    assert!(conn
+        .execute("INSERT INTO images(id, job) VALUES ('bad','missing')", [])
+        .is_err());
+}
+
+#[test]
 fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
     let folder = tempfile::tempdir().unwrap();
     let library = Library::open(folder.path()).unwrap();
