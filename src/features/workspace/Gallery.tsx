@@ -28,9 +28,12 @@ function arrange(ratios: number[], width: number) {
 function Thumbnail({ image, onRatio }: { image: GalleryImage; onRatio: (ratio: number) => void }) {
   const [missing, setMissing] = useState(false);
   if (missing) return <span className="missing-image">Original unavailable</span>;
-  return <img src={imageURL(image.id)} alt="" loading="lazy" decoding="async"
-    onLoad={e => onRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
-    onError={() => setMissing(true)} />;
+  return <>
+    <img src={imageURL(image.id)} alt="" loading="lazy" decoding="async"
+      onLoad={e => onRatio(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)}
+      onError={() => setMissing(true)} />
+    <span className="tile-prompt" aria-hidden="true">{image.job.prompt}</span>
+  </>;
 }
 
 export function Gallery({ images, open, create, busy }: {

@@ -75,6 +75,7 @@ it("limits the studio by image count and preserves drafts through full task hist
   const images = await screen.findAllByRole("button", { name: /^View image/ });
   expect(images).toHaveLength(8);
   expect(images[0].getAttribute("aria-label")).toContain("Study 3");
+  expect(images[0].textContent).toBe("Study 3");
   expect(images[7].nextElementSibling).toBe(screen.getByRole("button",{name:"New image"}));
   const prompt = screen.getByLabelText("Prompt");
   await user.type(prompt, "New landscape");
