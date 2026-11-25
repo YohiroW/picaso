@@ -1,9 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod catalog;
 mod commands;
 mod credentials;
 mod jobs;
 mod library;
+mod media;
 mod providers;
 use commands::*;
 use credentials::{Credentials, MacKeychain, Source, Status};
@@ -73,9 +75,14 @@ fn main() {
             let id = request.uri().path().trim_start_matches('/').to_string();
             tauri::async_runtime::spawn_blocking(move || {
                 let response = match library.original(&id) {
-                    Ok(bytes) => tauri::http::Response::builder()
-                        .header("Content-Type", "image/png")
-                        .body(bytes),
+                    Ok(original) => tauri::http::Response::builder()
+                        .header("Content-Type", original.format.mime())
+                        .header(
+                            "Content-Security-Policy",
+                            "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+                        )
+                        .header("X-Content-Type-Options", "nosniff")
+                        .body(original.bytes),
                     Err(_) => tauri::http::Response::builder()
                         .status(404)
                         .body(Vec::new()),
@@ -87,6 +94,7 @@ fn main() {
             let root = app.path().app_local_data_dir()?;
             #[cfg(feature = "fixture-provider")]
             let root = root.join("fixture-workspace");
+            app.manage(catalog::Catalog(root.join("models.json")));
             app.manage(library::Library::open(&root)?);
             let account_name = if cfg!(feature = "fixture-provider") {
                 "fixture-api-key"
@@ -109,6 +117,7 @@ fn main() {
             open_key_portal,
             history,
             current_model,
+            available_models,
             submit_job,
             export_image
         ])

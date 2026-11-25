@@ -1,15 +1,8 @@
 #[cfg(any(test, not(feature = "fixture-provider")))]
 pub mod openai;
+pub use crate::catalog::Model;
 use crate::jobs::ImageOptions;
-use serde::Serialize;
-
-#[derive(Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Model {
-    pub provider: &'static str,
-    pub id: &'static str,
-    pub can_edit: bool,
-}
+use crate::media::Original;
 pub struct Output {
     pub images: Vec<Vec<u8>>,
     pub usage: Option<serde_json::Value>,
@@ -32,7 +25,7 @@ pub trait Provider {
     fn render(
         &self,
         prompt: &str,
-        original: Option<&[u8]>,
+        original: Option<&Original>,
         options: &ImageOptions,
     ) -> Result<Output, Failure>;
 }
@@ -45,30 +38,50 @@ pub struct Fixture {
 #[cfg(any(test, feature = "fixture-provider"))]
 impl Provider for Fixture {
     fn model(&self) -> Model {
-        Model {
-            provider: "fixture",
-            id: "test-image",
-            can_edit: true,
-        }
+        crate::catalog::fixture()
     }
     fn render(
         &self,
         _: &str,
-        original: Option<&[u8]>,
-        _: &ImageOptions,
+        original: Option<&Original>,
+        options: &ImageOptions,
     ) -> Result<Output, Failure> {
+        use crate::media::Format;
         self.calls.set(self.calls.get() + 1);
-        let images = if let Some(bytes) = original {
-            vec![bytes.to_vec()]
-        } else {
-            let first = include_bytes!("../icons/icon.png");
-            let flipped = image::load_from_memory(first).expect("fixture PNG").fliph();
-            let mut second = std::io::Cursor::new(Vec::new());
-            flipped
-                .write_to(&mut second, image::ImageFormat::Png)
-                .expect("fixture PNG");
-            vec![first.to_vec(), second.into_inner()]
-        };
+        let input = original
+            .map(|im| im.bytes.as_slice())
+            .unwrap_or(include_bytes!("../icons/icon.png"));
+        let mut images = Vec::new();
+        for i in 0..options.n {
+            if options.output_format == Format::Svg {
+                images.push(br#"<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><circle cx="64" cy="64" r="50" fill="coral"/></svg>"#.to_vec());
+                continue;
+            }
+            let format = match options.output_format {
+                Format::Png => image::ImageFormat::Png,
+                Format::Jpeg => image::ImageFormat::Jpeg,
+                Format::Webp => image::ImageFormat::WebP,
+                Format::Gif => image::ImageFormat::Gif,
+                Format::Svg => unreachable!(),
+            };
+            if i == 0 && image::guess_format(input).ok() == Some(format) {
+                images.push(input.to_vec());
+                continue;
+            }
+            let mut image = image::load_from_memory(input)
+                .map_err(|_| Failure::known("Unreadable fixture input."))?;
+            if i % 2 == 1 {
+                image = image.fliph();
+            }
+            if format == image::ImageFormat::Jpeg {
+                image = image::DynamicImage::ImageRgb8(image.to_rgb8());
+            }
+            let mut buffer = std::io::Cursor::new(Vec::new());
+            image
+                .write_to(&mut buffer, format)
+                .map_err(|_| Failure::known("Could not encode fixture image."))?;
+            images.push(buffer.into_inner());
+        }
         Ok(Output {
             images,
             usage: None,

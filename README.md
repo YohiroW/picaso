@@ -4,16 +4,33 @@ Picaso 是用于 Apple Silicon Mac 的本地图像工作台。使用自己的 Op
 
 ## 安装与使用
 
-1. 打开 [0.1.3 开发版 DMG](src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Picaso_0.1.3_aarch64.dmg)，把 Picaso 拖入 Applications。最低系统版本为 macOS 14。开发版采用 ad hoc 签名。
+1. 打开 [0.1.4 开发版 DMG](src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Picaso_0.1.4_aarch64.dmg)，把 Picaso 拖入 Applications。最低系统版本为 macOS 14。开发版采用 ad hoc 签名。
 2. 首次打开时选择密钥来源。如果窗口检测到 `OPENAI_API_KEY`，可以点击 **Use environment key**。如果只在终端中设置了环境变量，可以从该终端启动 `~/Applications/Picaso.app/Contents/MacOS/picaso`（安装在系统 Applications 时去掉 `~`）。也可以在 **Key settings** 输入自己的 API Key，点击 **Save and use key** 存入当前用户的 macOS 钥匙串。可在此更换、切换或删除密钥。API 额度由 OpenAI API 账户提供，与 ChatGPT 订阅分别计费。
-3. 在左栏 **Prompt** 描述图片，选择画幅和质量，点击 **Generate image**。右侧按时间展示最近 8 张作品。末尾 **＋** 可回到新建草稿。右上角 **History** 可查看所有任务，包括失败或结果未确认的任务。点击任意一张作品可预览原图。点击 **Continue editing**，在 **Edit instructions** 中输入修改要求，再点 **Apply edit** 或按 ⌘↩。新结果和原图都会保留。
-4. **Save original…** 可将选中的 PNG 保存到自行选择的位置。预览窗口显示历史任务的提示词和实际参数。查看或导出旧图无需联网，首次使用也可以选择 **Browse without a key**。
+3. 在左栏 **Prompt** 描述图片，选择模型、画幅、质量和张数（1–4）。自定义画幅可填写像素宽高；**Advanced** 可选择输出格式与背景，点击 **Generate image**。右侧按时间展示最近 8 张作品。末尾 **＋** 可回到新建草稿。右上角 **History** 可查看所有任务，包括失败或结果未确认的任务。点击任意一张作品可预览原图。点击 **Continue editing**，在 **Edit instructions** 中输入修改要求，再点 **Apply edit** 或按 ⌘↩。新结果和原图都会保留。
+4. **Save original…** 可将选中的原始文件 保存到自行选择的位置。预览窗口显示历史任务的提示词和实际参数。查看或导出旧图无需联网，首次使用也可以选择 **Browse without a key**。
 
 只有明确提交“生成”或“编辑”会向 OpenAI 请求图片。超时或意外退出后，如果任务显示 **unconfirmed**，上游可能已经计费，请先检查历史和账户用量再决定是否重新提交。
 
 ## 数据与升级
 
 图库位于 `~/Library/Application Support/app.picaso.desktop/`，其中 `library.sqlite3` 存放任务与图片引用，`originals/` 保存原图，`credential-source.json` 只保存选用的来源。备份时先退出应用，再复制整个目录。手动密钥由系统钥匙串单独管理。升级时退出旧版并替换应用包，保留数据目录。
+
+## 模型配置
+
+模型下拉框和 Rust 请求校验共用[内置模型目录](src-tauri/models.json)。自定义目录位于 `~/Library/Application Support/app.picaso.desktop/models.json`。同一 ID 可覆盖部分字段（包括默认值），新增 ID 需要完整的模型条目；可以复制内置条目作为起点。配置在工作台载入和提交前读取。重新打开应用可立即查看修改结果。
+
+例如，要把 Sunburst 的新草稿默认设为透明 PNG，可创建以下文件：
+
+```json
+{
+  "models": [
+    {
+      "id": "gpt-image-2.6-sunburst",
+      "defaults": { "background": "transparent", "output_format": "png" }
+    }
+  ]
+}
+```
 
 ## 本地开发
 

@@ -114,6 +114,7 @@ impl<V: Vault> Credentials<V> {
         };
         key.ok_or_else(|| "Your selected key is unavailable. Open Key settings to restore it or choose another source.".into())
     }
+    #[cfg(any(test, not(feature = "fixture-provider")))]
     pub fn resolve(&self) -> Result<String, String> {
         self.read_source(
             self.selected()?

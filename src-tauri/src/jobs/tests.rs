@@ -1,4 +1,5 @@
 use super::*;
+use crate::media::Original;
 use crate::providers::Fixture;
 
 #[test]
@@ -43,12 +44,14 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
     let folder = tempfile::tempdir().unwrap();
     let library = Library::open(folder.path()).unwrap();
     let provider = Fixture::default();
-    let parent = submit(&library, &provider, &Submission::new("Two icon studies")).unwrap();
+    let mut parent_request = Submission::new("Two icon studies");
+    parent_request.options.n = 2;
+    let parent = submit(&library, &provider, &parent_request).unwrap();
     let images = library.history(false).unwrap().remove(0).images;
     assert_eq!(images.len(), 2);
     assert_ne!(
-        library.original(&images[0]).unwrap(),
-        library.original(&images[1]).unwrap()
+        library.original(&images[0]).unwrap().bytes,
+        library.original(&images[1]).unwrap().bytes
     );
     for text in ["Make it warmer", "Try a rounded form"] {
         let mut draft = Submission::new(text);
@@ -58,8 +61,8 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
         assert_eq!(job.input_id.as_ref(), Some(&images[1]));
         // The test provider echoes the exact original supplied to an edit.
         assert_eq!(
-            library.original(&job.images[0]).unwrap(),
-            library.original(&images[1]).unwrap()
+            library.original(&job.images[0]).unwrap().bytes,
+            library.original(&images[1]).unwrap().bytes
         );
     }
     assert_eq!(provider.calls.get(), 3);
@@ -87,12 +90,18 @@ fn unsupported_model_rejects_edits_before_calling_the_provider() {
     impl Provider for GenerateOnly {
         fn model(&self) -> Model {
             Model {
-                provider: "fixture",
-                id: "generate-only",
+                provider: "fixture".into(),
+                id: "generate-only".into(),
                 can_edit: false,
+                ..crate::catalog::fixture()
             }
         }
-        fn render(&self, _: &str, _: Option<&[u8]>, _: &ImageOptions) -> Result<Output, Failure> {
+        fn render(
+            &self,
+            _: &str,
+            _: Option<&Original>,
+            _: &ImageOptions,
+        ) -> Result<Output, Failure> {
             panic!("unsupported edit reached the provider")
         }
     }
@@ -113,7 +122,12 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
         fn model(&self) -> Model {
             Fixture::default().model()
         }
-        fn render(&self, _: &str, _: Option<&[u8]>, _: &ImageOptions) -> Result<Output, Failure> {
+        fn render(
+            &self,
+            _: &str,
+            _: Option<&Original>,
+            _: &ImageOptions,
+        ) -> Result<Output, Failure> {
             panic!("simulate exit after dispatch")
         }
     }
@@ -139,7 +153,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     assert!(interrupted.message.unwrap().contains("another charge"));
     assert!(!orphan.exists() && !temp.exists());
     assert_eq!(
-        reopened.original(&old.images[0]).unwrap(),
+        reopened.original(&old.images[0]).unwrap().bytes,
         include_bytes!("../../icons/icon.png")
     );
     assert!(submit(&reopened, &fixture, &draft).is_err());
@@ -174,7 +188,7 @@ fn duplicate_in_flight_request_does_not_invoke_a_second_provider() {
         fn render(
             &self,
             p: &str,
-            input: Option<&[u8]>,
+            input: Option<&Original>,
             options: &ImageOptions,
         ) -> Result<Output, Failure> {
             self.started.send(()).unwrap();
@@ -227,4 +241,110 @@ fn chosen_options_are_validated_recorded_and_used_for_deduplication() {
     draft.options.size = "unexpected".into();
     assert!(submit(&lib, &provider, &draft).is_err());
     assert_eq!(provider.calls.get(), 1);
+}
+
+#[test]
+fn every_output_format_survives_reopen_and_exports_the_original_bytes() {
+    use crate::media::Format;
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::open(root.path()).unwrap();
+    let provider = Fixture::default();
+    for format in [
+        Format::Png,
+        Format::Jpeg,
+        Format::Webp,
+        Format::Svg,
+        Format::Gif,
+    ] {
+        let mut draft = Submission::new("Mixed media");
+        draft.options.output_format = format;
+        draft.options.n = if format == Format::Svg { 1 } else { 3 };
+        submit(&library, &provider, &draft).unwrap();
+    }
+    drop(library);
+    let library = Library::open(root.path()).unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    for job in library.history(false).unwrap() {
+        let format = Format::parse(job.parameters["output_format"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            job.images.len(),
+            job.parameters["n"].as_u64().unwrap() as usize
+        );
+        for id in job.images {
+            let image = library.original(&id).unwrap();
+            assert_eq!(image.format, format);
+            format.validate(&image.bytes).unwrap();
+            let path = dest.path().join(format!("{}.{}", id, format.extension()));
+            library.export(&id, &path).unwrap();
+            assert_eq!(std::fs::read(path).unwrap(), image.bytes);
+            if !format.editable() {
+                let calls = provider.calls.get();
+                let mut draft = Submission::new("Change color");
+                draft.input_id = Some(id);
+                assert!(submit(&library, &provider, &draft).is_err());
+                assert_eq!(calls, provider.calls.get());
+            }
+        }
+    }
+}
+
+#[test]
+fn invalid_combinations_never_reserve_or_dispatch_a_request() {
+    use crate::media::Format;
+    let root = tempfile::tempdir().unwrap();
+    let lib = Library::open(root.path()).unwrap();
+    let provider = Fixture::default();
+    for (format, bg, n, edit) in [
+        (Format::Jpeg, "transparent", 1, false),
+        (Format::Svg, "auto", 2, false),
+        (Format::Svg, "auto", 1, true),
+        (Format::Png, "auto", 5, false),
+    ] {
+        let mut draft = Submission::new("Should stay in draft");
+        draft.options.output_format = format;
+        draft.options.background = bg.into();
+        draft.options.n = n;
+        if edit {
+            draft.input_id = Some(Uuid::new_v4().to_string());
+        }
+        assert!(submit(&lib, &provider, &draft).is_err());
+    }
+    assert_eq!(provider.calls.get(), 0);
+    assert!(lib.history(false).unwrap().is_empty());
+}
+#[test]
+fn migrates_v1_png_without_changing_originals_or_recharging_a_retry() {
+    let root = tempfile::tempdir().unwrap();
+    let id = Uuid::new_v4();
+    let draft = Submission::new("Old PNG");
+    let db = rusqlite::Connection::open(root.path().join("library.sqlite3")).unwrap();
+    db.execute_batch("CREATE TABLE jobs(id TEXT PRIMARY KEY,prompt TEXT,provider TEXT,model TEXT,status TEXT,parameters TEXT,input_id TEXT,created INTEGER,message TEXT,usage TEXT);
+       CREATE TABLE images(id TEXT PRIMARY KEY,job TEXT REFERENCES jobs(id)); PRAGMA user_version=1;").unwrap();
+    db.execute(
+        "INSERT INTO jobs VALUES (?1,?2,'fixture','test-image','succeeded',?3,NULL,1,NULL,NULL)",
+        rusqlite::params![
+            draft.request_id.to_string(),
+            draft.prompt,
+            r#"{"size":"1024x1024","quality":"low","output_format":"png","n":1}"#
+        ],
+    )
+    .unwrap();
+    db.execute(
+        "INSERT INTO images VALUES(?1,?2)",
+        [id.to_string(), draft.request_id.to_string()],
+    )
+    .unwrap();
+    drop(db);
+    let dir = root.path().join("originals");
+    std::fs::create_dir(&dir).unwrap();
+    let png = include_bytes!("../../icons/icon.png");
+    std::fs::write(dir.join(format!("{id}.png")), png).unwrap();
+    let lib = Library::open(root.path()).unwrap();
+    let provider = Fixture::default();
+    assert_eq!(lib.original(&id.to_string()).unwrap().bytes, png);
+    assert_eq!(
+        submit(&lib, &provider, &draft).unwrap(),
+        draft.request_id.to_string()
+    );
+    assert_eq!(provider.calls.get(), 0);
 }

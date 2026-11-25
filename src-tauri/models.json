@@ -1,0 +1,86 @@
+{
+  "models": [
+    {
+      "id": "gpt-image-2",
+      "displayName": "gpt-image-2",
+      "provider": "openai",
+      "canEdit": true,
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1024x1536",
+        "1536x1024",
+        "2560x1440",
+        "3840x2160"
+      ],
+      "customSize": true,
+      "qualities": [
+        "auto",
+        "low",
+        "medium",
+        "high"
+      ],
+      "formats": [
+        "png",
+        "jpeg",
+        "webp"
+      ],
+      "backgrounds": [
+        "auto",
+        "transparent",
+        "opaque"
+      ],
+      "maxImages": 4,
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "low",
+        "n": 1,
+        "output_format": "png",
+        "background": "auto"
+      }
+    },
+    {
+      "id": "gpt-image-2.6-sunburst",
+      "displayName": "gpt-image-2.6-sunburst",
+      "provider": "openai",
+      "canEdit": true,
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1024x1536",
+        "1536x1024",
+        "2560x1440",
+        "3840x2160"
+      ],
+      "customSize": true,
+      "qualities": [
+        "auto",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "formats": [
+        "png",
+        "jpeg",
+        "webp",
+        "svg",
+        "gif"
+      ],
+      "backgrounds": [
+        "auto",
+        "transparent",
+        "opaque"
+      ],
+      "maxImages": 4,
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "auto",
+        "n": 1,
+        "output_format": "png",
+        "background": "auto"
+      }
+    }
+  ]
+}

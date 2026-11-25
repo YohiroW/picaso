@@ -10,6 +10,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::media::{Format, Original};
 use crate::providers::{Model, Output};
 pub const UNCERTAIN: &str = "Result unconfirmed. Submitting again may incur another charge.";
 
@@ -56,10 +57,11 @@ impl Library {
                 id TEXT PRIMARY KEY, prompt TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
                 status TEXT NOT NULL, parameters TEXT NOT NULL, input_id TEXT REFERENCES images(id),
                 created INTEGER NOT NULL DEFAULT(unixepoch()), message TEXT, usage TEXT);
-                CREATE TABLE images (id TEXT PRIMARY KEY, job TEXT NOT NULL REFERENCES jobs(id));
+                CREATE TABLE images (id TEXT PRIMARY KEY, job TEXT NOT NULL REFERENCES jobs(id), format TEXT NOT NULL DEFAULT 'png');
                 CREATE INDEX images_job ON images(job);
-                PRAGMA user_version=1;")?,
-            1 => (),
+                PRAGMA user_version=2;")?,
+            1 => tx.execute_batch("ALTER TABLE images ADD COLUMN format TEXT NOT NULL DEFAULT 'png'; PRAGMA user_version=2;")?,
+            2 => (),
             _ => bail!("This library needs a newer version of Picaso."),
         }
         tx.execute(
@@ -71,8 +73,8 @@ impl Library {
             let path = item?.path();
             let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
             let orphan = if let Some(id) = name
-                .strip_suffix(".png")
-                .and_then(|s| Uuid::parse_str(s).ok())
+                .rsplit_once('.')
+                .and_then(|(stem, ext)| Format::parse(ext).and_then(|_| Uuid::parse_str(stem).ok()))
             {
                 !lib.has_image(&id.to_string())?
             } else {
@@ -112,10 +114,15 @@ impl Library {
             ],
         )?;
         if added == 0 {
-            let (matches, status, message): (bool,String,Option<String>) = conn.query_row(
-                "SELECT prompt=?2 AND provider=?3 AND model=?4 AND parameters=?5 AND input_id IS ?6,status,message FROM jobs WHERE id=?1",
-                params![id.to_string(),prompt,model.provider,model.id,parameters,input], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
-            if !matches {
+            let (matches, status, message, stored): (bool,String,Option<String>,String) = conn.query_row(
+                "SELECT prompt=?2 AND provider=?3 AND model=?4 AND input_id IS ?5,status,message,parameters FROM jobs WHERE id=?1",
+                params![id.to_string(),prompt,model.provider,model.id,input], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
+            let mut prior: serde_json::Value = serde_json::from_str(&stored)?;
+            // v1 tasks used the API's implicit auto background.
+            if prior.get("background").is_none() {
+                prior["background"] = serde_json::json!("auto");
+            }
+            if !matches || prior != serde_json::from_str::<serde_json::Value>(parameters)? {
                 bail!("This request ID was already used for a different submission.");
             }
             if status != "succeeded" {
@@ -127,7 +134,7 @@ impl Library {
         }
         Ok(added != 0)
     }
-    pub(crate) fn finish(&self, id: &Uuid, output: Output) -> Result<()> {
+    pub(crate) fn finish(&self, id: &Uuid, output: Output, format: Format) -> Result<()> {
         if output.images.is_empty() {
             bail!("No image was returned.");
         }
@@ -136,10 +143,12 @@ impl Library {
         let mut written = Vec::new();
         let result = (|| -> Result<()> {
             for data in output.images {
-                image::load_from_memory_with_format(&data, image::ImageFormat::Png)
-                    .context("Couldn’t read the returned PNG.")?;
+                format.validate(&data)?;
                 let image_id = Uuid::new_v4().to_string();
-                let path = self.root.join("originals").join(format!("{image_id}.png"));
+                let path = self
+                    .root
+                    .join("originals")
+                    .join(format!("{image_id}.{}", format.extension()));
                 let mut tmp = tempfile::Builder::new()
                     .prefix(".picaso-tmp-")
                     .tempfile_in(self.root.join("originals"))?;
@@ -148,8 +157,8 @@ impl Library {
                 tmp.persist_noclobber(&path)?;
                 written.push(path);
                 tx.execute(
-                    "INSERT INTO images VALUES (?1,?2)",
-                    params![image_id, id.to_string()],
+                    "INSERT INTO images(id,job,format) VALUES (?1,?2,?3)",
+                    params![image_id, id.to_string(), format.extension()],
                 )?;
             }
             tx.execute(
@@ -184,16 +193,28 @@ impl Library {
             .optional()?
             .is_some())
     }
-    pub fn original(&self, id: &str) -> Result<Vec<u8>> {
+    pub fn image_format(&self, id: &str) -> Result<Format> {
+        let ext: String = self
+            .connect()?
+            .query_row("SELECT format FROM images WHERE id=?1", [id], |r| r.get(0))
+            .optional()?
+            .context("This image is missing from the library.")?;
+        Format::parse(&ext).context("Unknown library image format.")
+    }
+    pub fn original(&self, id: &str) -> Result<Original> {
         let id = Uuid::parse_str(id)
             .context("Choose an image from History.")?
             .to_string();
-        if !self.has_image(&id)? {
-            bail!("This image is missing from the library.");
-        }
-        fs::read(self.root.join("originals").join(format!("{id}.png"))).context(
-            "The original image is missing or unreadable. Restore it or choose another image.",
+        let format = self.image_format(&id)?;
+        let bytes = fs::read(
+            self.root
+                .join("originals")
+                .join(format!("{id}.{}", format.extension())),
         )
+        .context(
+            "The original image is missing or unreadable. Restore it or choose another image.",
+        )?;
+        Ok(Original { bytes, format })
     }
     pub fn export(&self, id: &str, dest: &Path) -> Result<()> {
         let data = self.original(id)?;
@@ -207,7 +228,7 @@ impl Library {
         let mut tmp = tempfile::NamedTempFile::new_in(
             dest.parent().context("Choose a destination folder.")?,
         )?;
-        tmp.write_all(&data)?;
+        tmp.write_all(&data.bytes)?;
         tmp.persist(dest)?;
         Ok(())
     }

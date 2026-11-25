@@ -13,6 +13,7 @@
     "allow-open-key-portal",
     "allow-history",
     "allow-current-model",
+    "allow-available-models",
     "allow-submit-job",
     "allow-export-image"
   ]

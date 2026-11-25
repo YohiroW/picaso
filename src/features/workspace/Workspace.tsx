@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
+import { ImageSettings, optionsError } from "./ImageSettings";
 import { Label } from "../../components/ui/label";
 import { AppBar } from "../../components/AppBar";
 import { desktop, imageURL, type CredentialStatus, type ImageOptions, type Job, type Model } from "../../lib/desktop";
 import { Gallery, type GalleryImage } from "./Gallery";
 import { ImagePreview } from "./ImagePreview";
 
-const defaults: ImageOptions = { size: "1024x1024", quality: "low" };
-type Draft = { prompt: string; options: ImageOptions };
-const emptyDraft: Draft = { prompt: "", options: defaults };
+
+type Draft = { prompt: string; modelId?: string; options?: ImageOptions; custom?: boolean };
+const emptyDraft: Draft = { prompt: "" };
 
 function recentImages(jobs: Job[]): GalleryImage[] {
   return jobs.filter(job => job.status === "succeeded").reverse()
@@ -37,7 +38,8 @@ function HistoryIcon() {
 export function Workspace({ status, openSettings }: { status: CredentialStatus; openSettings: () => void }) {
   const [history, setHistory] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [model, setModel] = useState<Model>();
+  const [models, setModels] = useState<Model[]>([]);
+  const [catalogError,setCatalogError] = useState("");
   const [revision, refresh] = useState(0);
   const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -53,19 +55,29 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   const [focusRequest, setFocusRequest] = useState(0);
   const draftKey = reference?.id ?? "new";
   const draft = drafts[draftKey] ?? emptyDraft;
+  const model = draft.modelId ? models.find(m=>m.id===draft.modelId) : models[0];
+  const options = draft.options ?? model?.defaults;
+  const validation = model && options ? optionsError(model,options,!!reference) : undefined;
   const available = model?.provider === "fixture" || !!(status.selected && status[status.selected]);
-  const canSubmit = available && draft.prompt.trim() && (!reference || model?.canEdit) && !busy;
+  const canSubmit = model && options && !validation && available && draft.prompt.trim() && (!reference || model?.canEdit) && !busy;
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setLoadError("");
-    Promise.all([desktop.history(!history), desktop.model()]).then(([results, current]) => {
-      if (active) { setJobs(results); setModel(current); }
+    desktop.history(!history).then(results => {
+      if (active) setJobs(results);
     }).catch(e => { if (active) setLoadError(String(e)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [history, revision]);
+
+  useEffect(() => {
+    let active=true;
+    desktop.models().then(result=>{if(active){setModels(result);setCatalogError("");}})
+      .catch(e=>{if(active){setCatalogError(String(e));setModels([]);}});
+    return ()=>{active=false;};
+  }, [revision]);
 
   useLayoutEffect(() => {
     if (focusRequest) promptField.current?.focus();
@@ -95,22 +107,22 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!canSubmit || inFlight.current) return;
+    if (!model || !options || !canSubmit || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
-      await desktop.submit({ requestId: crypto.randomUUID(), prompt: draft.prompt, inputId: reference?.id, options: draft.options });
+      await desktop.submit({ requestId: crypto.randomUUID(), model: model.id, prompt: draft.prompt, inputId: reference?.id, options });
       setDrafts(prev => {
         const next = { ...prev };
         if (reference) delete next[reference.id];
-        else next.new = { prompt: "", options: draft.options };
+        else next.new = { ...draft, prompt: "", modelId:model.id, options };
         return next;
       });
       setReference(undefined);
       setHistory(false);
-      setNotice("Image saved to your gallery.");
+      setNotice("Saved to your gallery.");
     } catch (e) { setError(String(e)); }
     finally {
       inFlight.current = false;
@@ -144,7 +156,7 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
                   }
                 }}/>
               <div className="prompt-footer"><kbd title="Command + Return">⌘ ↩</kbd>
-                <button type="submit" className="primary submit" disabled={!canSubmit}>{busy ? "Creating…" : reference ? "Apply edit" : "Generate image"}<span aria-hidden="true">↑</span></button>
+                <button type="submit" className="primary submit" disabled={!canSubmit}>{busy ? "Creating…" : reference ? (options && options.n>1 ? `Apply edit · ${options.n} images` : "Apply edit") : (options && options.n>1 ? `Generate ${options.n} images` : "Generate image")}<span aria-hidden="true">↑</span></button>
               </div>
             </div>
             {model && !available && <p className="feedback">Choose a key to create images. <button type="button" className="link" onClick={openSettings}>Key settings</button></p>}
@@ -152,21 +164,12 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
             {error && <p role="alert" className="feedback">{error}</p>}
             {notice && <p role="status" className="feedback">{notice}</p>}
           </section>
-          <section className="panel-section"><h2>Model</h2>
-            <div className="model-value">{model?.id ?? "Loading…"}<small>{model?.provider === "fixture" ? "Local test provider" : "OpenAI"}</small></div>
-          </section>
-          <section className="panel-section"><h2>Image settings</h2>
-            <div className="control-row"><Label htmlFor="image-size">Size &amp; orientation</Label>
-              <select id="image-size" value={draft.options.size} disabled={busy} onChange={e => updateDraft({options:{...draft.options,size:e.target.value as ImageOptions["size"]}})}>
-                <option value="1024x1024">Square · 1024 × 1024</option><option value="1536x1024">Landscape · 1536 × 1024</option><option value="1024x1536">Portrait · 1024 × 1536</option>
-              </select></div>
-            <div className="control-row"><Label htmlFor="image-quality">Quality</Label>
-              <select id="image-quality" value={draft.options.quality} disabled={busy} onChange={e => updateDraft({options:{...draft.options,quality:e.target.value as ImageOptions["quality"]}})}>
-                <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
-              </select></div>
-            <div className="control-row"><span>Number of images</span><span>1</span></div>
-          </section>
-          <details className="panel-section advanced"><summary>Advanced</summary><div className="control-row"><span>Output format</span><span>PNG</span></div></details>
+          {catalogError && <p role="alert" className="panel-section">{catalogError} <button type="button" onClick={()=>refresh(n=>n+1)}>Reload models</button></p>}
+          {!catalogError && !model && draft.modelId && models.length>0 && <p role="alert" className="panel-section">The selected model is unavailable. <button type="button" onClick={()=>updateDraft({modelId:models[0].id,options:models[0].defaults,custom:false})}>Use {models[0].displayName}</button></p>}
+          {model && options && <ImageSettings models={models} model={model} options={options} custom={draft.custom ?? !model.sizes.includes(options.size)}
+            editing={!!reference} disabled={busy} issue={validation}
+            selectModel={next=>updateDraft({modelId:next.id,options:next.defaults,custom:!next.sizes.includes(next.defaults.size)})}
+            update={(value,custom)=>updateDraft({options:value,modelId:model.id,custom:custom ?? draft.custom})}/>}
         </form>
       </aside>
       <section className="gallery-pane" aria-label={history ? "Task history" : "Recent creations"}>

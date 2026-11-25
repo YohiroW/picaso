@@ -8,6 +8,7 @@ fn main() {
         "open_key_portal",
         "history",
         "current_model",
+        "available_models",
         "submit_job",
         "export_image",
     ]);

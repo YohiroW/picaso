@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Workspace } from "./Workspace";
+import bundled from "../../../src-tauri/models.json";
 import { desktop, type Job } from "../../lib/desktop";
 
 const original: Job = {
@@ -21,7 +22,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 async function openWorkspace(canEdit = true) {
   vi.stubGlobal("__TAURI_INTERNALS__", {convertFileSrc: (id: string) => "/image/" + id});
   vi.spyOn(desktop,"history").mockResolvedValue([original]);
-  vi.spyOn(desktop,"model").mockResolvedValue({provider:"fixture", id:"fixture", canEdit});
+  vi.spyOn(desktop,"models").mockResolvedValue([{...bundled.models[0],provider:"fixture",id:"fixture",canEdit}]);
   const request = vi.spyOn(desktop,"submit").mockRejectedValue("The original image is missing.");
   render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
@@ -38,7 +39,7 @@ it("selecting a single original preserves the draft and only an explicit submit 
   expect(request).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button",{name:"Apply edit"}));
   expect(request).toHaveBeenCalledTimes(1);
-  expect(request).toHaveBeenCalledWith({requestId:expect.any(String),prompt:input.value,inputId:"a2",options:{size:"1024x1024",quality:"low"}});
+  expect(request).toHaveBeenCalledWith({requestId:expect.any(String),model:"fixture",prompt:input.value,inputId:"a2",options:bundled.models[0].defaults});
   expect(await screen.findByRole("alert")).toHaveProperty("textContent","The original image is missing.");
   expect(input.value).toBe("Add a copper edge");
 });
@@ -67,7 +68,7 @@ it("limits the studio by image count and preserves drafts through full task hist
   }));
   const failed = {...original, id:"failed", prompt:"Another study", status:"unconfirmed", images:[], message:"Result unconfirmed."};
   const history = vi.spyOn(desktop, "history").mockImplementation(async recent => recent ? jobs : [failed, ...jobs]);
-  vi.spyOn(desktop, "model").mockResolvedValue({provider:"fixture",id:"test",canEdit:true});
+  vi.spyOn(desktop,"models").mockResolvedValue([{...bundled.models[0],provider:"fixture",id:"test"}]);
   const request = vi.spyOn(desktop, "submit").mockResolvedValue("B");
   render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
@@ -93,5 +94,34 @@ it("limits the studio by image count and preserves drafts through full task hist
   expect(request).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button",{name:"Generate image"}));
   expect(request).toHaveBeenCalledOnce();
-  expect(request.mock.calls[0][0].options).toEqual({size:"1536x1024",quality:"medium"});
+  expect(request.mock.calls[0][0].options).toEqual({...bundled.models[0].defaults,size:"1536x1024",quality:"medium"});
+});
+
+it("submits the selected catalog model, custom dimensions, count, format and background together", async () => {
+  vi.stubGlobal("__TAURI_INTERNALS__", { convertFileSrc: (id: string) => "/image/" + id });
+  vi.spyOn(desktop,"models").mockResolvedValue(bundled.models);
+  vi.spyOn(desktop,"history").mockResolvedValue([]);
+  const submit=vi.spyOn(desktop,"submit").mockResolvedValue("B");
+  render(<Workspace status={{selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={()=>{}}/>);
+  const user=userEvent.setup();
+  await user.type(screen.getByLabelText("Prompt"),"Paper icon");
+  await user.selectOptions(await screen.findByLabelText("Model"),"gpt-image-2.6-sunburst");
+  await user.selectOptions(screen.getByLabelText("Size & orientation"),"custom");
+  const width=screen.getByLabelText("Width (px)");
+  fireEvent.change(width,{target:{value:"1599"}});
+  expect(screen.getByRole("button",{name:"Generate image"})).toHaveProperty("disabled",true);
+  fireEvent.change(width,{target:{value:"1600"}});
+  await user.selectOptions(screen.getByLabelText("Quality"),"xhigh");
+  fireEvent.change(screen.getByRole("slider"),{target:{value:"3"}});
+  await user.click(screen.getByText("Advanced"));
+  const fmt = screen.getByLabelText("Output format") as HTMLSelectElement;
+  expect(Array.from(fmt.options).find(o=>o.value==="svg")?.disabled).toBe(true);
+  await user.selectOptions(fmt,"webp");
+  await user.selectOptions(screen.getByLabelText("Background"),"transparent");
+  expect(submit).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button",{name:"Generate 3 images"}));
+  expect(submit).toHaveBeenCalledOnce();
+  expect(submit.mock.calls[0][0]).toMatchObject({model:"gpt-image-2.6-sunburst",prompt:"Paper icon",options:{
+    size:"1600x1024",quality:"xhigh",n:3,output_format:"webp",background:"transparent"
+  }});
 });

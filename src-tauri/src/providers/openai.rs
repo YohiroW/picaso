@@ -1,26 +1,23 @@
 use super::{Failure, Model, Output, Provider};
+use crate::media::Original;
 use crate::{jobs::ImageOptions, library::UNCERTAIN};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::{multipart, Client};
 use serde::Deserialize;
 use std::time::Duration;
 
-pub const MODEL: Model = Model {
-    provider: "openai",
-    id: "gpt-image-2",
-    can_edit: true,
-};
 const API: &str = "https://api.openai.com/v1/images";
 
 pub struct OpenAi {
     key: String,
+    model: Model,
     client: Client,
     #[cfg(test)]
     test_origin: Option<String>,
 }
 
 impl OpenAi {
-    pub fn new(key: String) -> Result<Self, String> {
+    pub fn new(key: String, model: Model) -> Result<Self, String> {
         let client = Client::builder()
             .connect_timeout(Duration::from_secs(20))
             .timeout(Duration::from_secs(300))
@@ -30,6 +27,7 @@ impl OpenAi {
             .map_err(|_| "Couldn’t initialize the network client.")?;
         Ok(Self {
             key,
+            model,
             client,
             #[cfg(test)]
             test_origin: None,
@@ -49,28 +47,37 @@ struct ImageData {
 
 impl Provider for OpenAi {
     fn model(&self) -> Model {
-        MODEL
+        self.model.clone()
     }
     fn render(
         &self,
         prompt: &str,
-        original: Option<&[u8]>,
+        original: Option<&Original>,
         options: &ImageOptions,
     ) -> Result<Output, Failure> {
         let api = API;
         #[cfg(test)]
         let api = self.test_origin.as_deref().unwrap_or(api);
+        let mut fields = serde_json::to_value(options).expect("serializable image options");
+        fields["model"] = serde_json::json!(self.model.id);
+        fields["prompt"] = serde_json::json!(prompt);
         let request = match original {
-            Some(bytes) => {
-                let image = multipart::Part::bytes(bytes.to_owned()).file_name("original.png")
-                    .mime_str("image/png").expect("static PNG MIME type");
-                let form = multipart::Form::new().text("model",MODEL.id).text("prompt",prompt.to_owned())
-                    .text("size",options.size.clone()).text("quality",options.quality.clone()).text("output_format","png").text("n","1").part("image",image);
+            Some(original) => {
+                let image = multipart::Part::bytes(original.bytes.clone())
+                    .file_name(format!("original.{}", original.format.extension()))
+                    .mime_str(original.format.mime())
+                    .expect("known image MIME type");
+                let mut form = multipart::Form::new().part("image", image);
+                for (name, value) in fields.as_object().expect("image request object") {
+                    let text = value
+                        .as_str()
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| value.to_string());
+                    form = form.text(name.clone(), text);
+                }
                 self.client.post(format!("{api}/edits")).multipart(form)
-            },
-            None => self.client.post(format!("{api}/generations")).json(&serde_json::json!({
-                "model":MODEL.id, "prompt":prompt, "size":options.size, "quality":options.quality, "output_format":"png", "n":1
-            })),
+            }
+            None => self.client.post(format!("{api}/generations")).json(&fields),
         };
         let response = request.bearer_auth(&self.key).send().map_err(|e| {
             if e.is_connect() {
@@ -128,7 +135,7 @@ fn api_failure(status: u16, code: &str) -> Failure {
         (402,_) | (_, "insufficient_quota" | "billing_hard_limit_reached" | "billing_not_active") => "OpenAI API credit is unavailable. Check billing, balance and spending limits.",
         (429,_) => "OpenAI’s rate limit was reached. Wait before submitting again.",
         (_, "content_policy_violation" | "moderation_blocked") => "OpenAI declined this image request. Revise your prompt or reference.",
-        (400,_) => "OpenAI could not accept this input. Revise your prompt or choose another original.",
+        (400,_) => "OpenAI could not accept this request. Check the size, count and output settings, or revise the prompt or reference.",
         _ => "OpenAI rejected the request. Check your API account and model access.",
     })
 }

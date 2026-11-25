@@ -1,4 +1,5 @@
 use crate::{
+    catalog::Catalog,
     jobs::Submission,
     library::{Job, Library},
     providers::Model,
@@ -12,31 +13,46 @@ pub fn history(library: State<Library>, recent_only: Option<bool>) -> Result<Vec
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
-pub fn current_model() -> Model {
+pub fn available_models(catalog: State<Catalog>) -> Result<Vec<Model>, String> {
+    let models = catalog.models().map_err(|e| format!("{e:#}"))?;
     #[cfg(feature = "fixture-provider")]
     {
-        use crate::providers::Provider;
-        crate::providers::Fixture::default().model()
+        let _ = models;
+        Ok(vec![crate::catalog::fixture()])
     }
     #[cfg(not(feature = "fixture-provider"))]
     {
-        crate::providers::openai::MODEL
+        Ok(models)
     }
+}
+#[tauri::command]
+pub fn current_model(catalog: State<Catalog>) -> Result<Model, String> {
+    available_models(catalog)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| "No configured models.".into())
 }
 #[tauri::command]
 pub async fn submit_job(
     library: State<'_, Library>,
     state: State<'_, crate::Account>,
+    catalog: State<'_, Catalog>,
     draft: Submission,
 ) -> Result<String, String> {
+    let models = available_models(catalog)?;
+    let selected = match &draft.model {
+        Some(id) => models.into_iter().find(|m| m.id == *id),
+        None => models.into_iter().next(),
+    }
+    .ok_or("The selected model is no longer configured.")?;
     let library = library.inner().clone();
     #[cfg(not(feature = "fixture-provider"))]
     let key = crate::account(&state)?.resolve()?;
     #[cfg(feature = "fixture-provider")]
-    let _ = state;
+    let _ = (state, selected);
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(not(feature = "fixture-provider"))]
-        let provider = crate::providers::openai::OpenAi::new(key)?;
+        let provider = crate::providers::openai::OpenAi::new(key, selected)?;
         #[cfg(feature = "fixture-provider")]
         let provider = crate::providers::Fixture::default();
         crate::jobs::submit(&library, &provider, &draft).map_err(|e| e.to_string())
@@ -49,9 +65,11 @@ pub async fn export_image(library: State<'_, Library>, id: String) -> Result<boo
     let id = uuid::Uuid::parse_str(&id)
         .map_err(|_| "Choose an image from History.")?
         .to_string();
+    let format = library.image_format(&id).map_err(|e| e.to_string())?;
+    let ext = format.extension();
     let Some(file) = rfd::AsyncFileDialog::new()
-        .set_file_name(format!("Picaso-{id}.png"))
-        .add_filter("PNG image", &["png"])
+        .set_file_name(format!("Picaso-{id}.{ext}"))
+        .add_filter(format!("{} image", ext.to_uppercase()), &[ext])
         .save_file()
         .await
     else {
