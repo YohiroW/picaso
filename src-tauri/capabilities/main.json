@@ -1,6 +1,15 @@
 {
   "identifier": "main",
-  "description": "Read installation details in the local Picaso window.",
-  "windows": ["main"],
-  "permissions": ["allow-installation-info"]
+  "description": "Scoped local commands for the Picaso main window.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "allow-installation-info",
+    "allow-credential-status",
+    "allow-select-source",
+    "allow-save-key",
+    "allow-remove-key",
+    "allow-open-key-portal"
+  ]
 }
