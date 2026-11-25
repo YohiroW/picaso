@@ -1,8 +1,8 @@
 {
   "models": [
     {
-      "id": "gpt-image-2",
-      "displayName": "gpt-image-2",
+      "id": "gpt-image-2.6-flare",
+      "displayName": "GPT-Image-2.6 Flare",
       "provider": "openai",
       "canEdit": true,
       "sizes": [
@@ -18,12 +18,16 @@
         "auto",
         "low",
         "medium",
-        "high"
+        "high",
+        "xhigh",
+        "max"
       ],
       "formats": [
         "png",
         "jpeg",
-        "webp"
+        "webp",
+        "svg",
+        "gif"
       ],
       "backgrounds": [
         "auto",
@@ -41,7 +45,7 @@
     },
     {
       "id": "gpt-image-2.6-sunburst",
-      "displayName": "gpt-image-2.6-sunburst",
+      "displayName": "GPT-Image-2.6 Sunburst",
       "provider": "openai",
       "canEdit": true,
       "sizes": [
@@ -77,6 +81,131 @@
       "defaults": {
         "size": "1024x1024",
         "quality": "auto",
+        "n": 1,
+        "output_format": "png",
+        "background": "auto"
+      }
+    },
+    {
+      "id": "gpt-image-2.5-flare",
+      "displayName": "GPT-Image-2.5 Flare",
+      "provider": "openai",
+      "canEdit": true,
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1024x1536",
+        "1536x1024",
+        "2560x1440",
+        "3840x2160"
+      ],
+      "customSize": true,
+      "qualities": [
+        "auto",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "formats": [
+        "png",
+        "jpeg",
+        "webp",
+        "svg",
+        "gif"
+      ],
+      "backgrounds": [
+        "auto",
+        "transparent",
+        "opaque"
+      ],
+      "maxImages": 4,
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "auto",
+        "n": 1,
+        "output_format": "png",
+        "background": "auto"
+      }
+    },
+    {
+      "id": "gpt-image-2.5-sunburst",
+      "displayName": "GPT-Image-2.5 Sunburst",
+      "provider": "openai",
+      "canEdit": true,
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1024x1536",
+        "1536x1024",
+        "2560x1440",
+        "3840x2160"
+      ],
+      "customSize": true,
+      "qualities": [
+        "auto",
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max"
+      ],
+      "formats": [
+        "png",
+        "jpeg",
+        "webp",
+        "svg",
+        "gif"
+      ],
+      "backgrounds": [
+        "auto",
+        "transparent",
+        "opaque"
+      ],
+      "maxImages": 4,
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "auto",
+        "n": 1,
+        "output_format": "png",
+        "background": "auto"
+      }
+    },
+    {
+      "id": "gpt-image-2",
+      "displayName": "GPT-Image-2 (deprecated)",
+      "provider": "openai",
+      "canEdit": true,
+      "sizes": [
+        "auto",
+        "1024x1024",
+        "1024x1536",
+        "1536x1024",
+        "2560x1440",
+        "3840x2160"
+      ],
+      "customSize": true,
+      "qualities": [
+        "auto",
+        "low",
+        "medium",
+        "high"
+      ],
+      "formats": [
+        "png",
+        "jpeg",
+        "webp"
+      ],
+      "backgrounds": [
+        "auto",
+        "transparent",
+        "opaque"
+      ],
+      "maxImages": 4,
+      "defaults": {
+        "size": "1024x1024",
+        "quality": "low",
         "n": 1,
         "output_format": "png",
         "background": "auto"

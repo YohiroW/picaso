@@ -36,7 +36,7 @@ fn serve(status: u16, body: String) -> (OpenAi, thread::JoinHandle<(String, Vec<
     });
     let mut provider = OpenAi::new(
         "fictional-http-key".into(),
-        crate::catalog::bundled().pop().unwrap(),
+        crate::catalog::bundled().into_iter().next().unwrap(),
     )
     .unwrap();
     provider.client = Client::builder().no_proxy().build().unwrap();
@@ -68,7 +68,7 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
     for original in [None, Some(source_id.clone())] {
         let (provider,server)=serve(200,serde_json::json!({"data":vec![serde_json::json!({"b64_json":STANDARD.encode(&webp)});3],"usage":{"total_tokens":23}}).to_string());
         let mut draft = Submission::new("Clay P icon");
-        draft.model = Some("gpt-image-2.6-sunburst".into());
+        draft.model = Some("gpt-image-2.6-flare".into());
         draft.input_id = original.clone();
         draft.options = ImageOptions {
             size: "1600x1024".into(),
@@ -84,7 +84,7 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
             .into_iter()
             .find(|j| j.id == id)
             .unwrap();
-        assert_eq!(job.model, "gpt-image-2.6-sunburst");
+        assert_eq!(job.model, "gpt-image-2.6-flare");
         assert_eq!(
             job.parameters,
             serde_json::to_value(&draft.options).unwrap()
@@ -112,7 +112,7 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
             let text = String::from_utf8_lossy(&data);
             for (name, value) in [
                 ("prompt", "Clay P icon"),
-                ("model", "gpt-image-2.6-sunburst"),
+                ("model", "gpt-image-2.6-flare"),
                 ("size", "1600x1024"),
                 ("quality", "xhigh"),
                 ("n", "3"),
@@ -126,7 +126,7 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
             assert!(header.starts_with("POST /v1/images/generations "));
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&data).unwrap(),
-                serde_json::json!({"model":"gpt-image-2.6-sunburst","prompt":"Clay P icon","size":"1600x1024","quality":"xhigh","n":3,"output_format":"webp","background":"transparent"})
+                serde_json::json!({"model":"gpt-image-2.6-flare","prompt":"Clay P icon","size":"1600x1024","quality":"xhigh","n":3,"output_format":"webp","background":"transparent"})
             );
         }
     }
@@ -162,7 +162,7 @@ fn a_refused_connection_has_a_network_action_and_no_secret() {
     drop(listener);
     let mut provider = OpenAi::new(
         "fictional-network-key".into(),
-        crate::catalog::bundled().pop().unwrap(),
+        crate::catalog::bundled().into_iter().next().unwrap(),
     )
     .unwrap();
     provider.test_origin = Some(endpoint);

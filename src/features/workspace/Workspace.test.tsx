@@ -105,7 +105,10 @@ it("submits the selected catalog model, custom dimensions, count, format and bac
   render(<Workspace status={{selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={()=>{}}/>);
   const user=userEvent.setup();
   await user.type(screen.getByLabelText("Prompt"),"Paper icon");
-  await user.selectOptions(await screen.findByLabelText("Model"),"gpt-image-2.6-sunburst");
+  const model = await screen.findByRole("combobox", {name: "Model"}) as HTMLSelectElement;
+  expect(model.value).toBe("gpt-image-2.6-flare");
+  expect(model.selectedOptions[0].textContent).toBe("GPT-Image-2.6 Flare");
+  await user.selectOptions(model, "GPT-Image-2.6 Sunburst");
   await user.selectOptions(screen.getByLabelText("Size & orientation"),"custom");
   const width=screen.getByLabelText("Width (px)");
   fireEvent.change(width,{target:{value:"1599"}});

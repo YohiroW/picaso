@@ -113,7 +113,7 @@ fn merge(base: &mut serde_json::Value, patch: serde_json::Value) {
 
 #[cfg(any(test, feature = "fixture-provider"))]
 pub fn fixture() -> Model {
-    let mut model = bundled().pop().expect("fixture capabilities");
+    let mut model = bundled().into_iter().next().expect("fixture capabilities");
     model.id = "test-image".into();
     model.display_name = "Local test images".into();
     model.provider = "fixture".into();
@@ -134,10 +134,10 @@ mod tests {
         let file = serde_json::json!({"models":[{"id":base[1].id,"defaults":{"background":"transparent"}},extra]});
         fs::write(&catalog.0, file.to_string()).unwrap();
         let models = catalog.models().unwrap();
-        assert_eq!(models.len(), 3);
+        assert_eq!(models.len(), base.len() + 1);
         assert_eq!(models[1].defaults.background, "transparent");
         assert_eq!(models[1].qualities, base[1].qualities);
-        assert_eq!(models[2].id, "test-custom");
+        assert_eq!(models.last().unwrap().id, "test-custom");
         fs::write(
             &catalog.0,
             r#"{"models":[{"id":"gpt-image-2","maxImages":5}]}"#,

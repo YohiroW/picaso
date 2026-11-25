@@ -1,8 +1,8 @@
 # OpenAI 图片适配器
 
-2026-11-25 核对官方文档。默认服务商为 OpenAI，模型为 `gpt-image-2`，同一模型支持生成和编辑。0.1.4 从模型目录读取画幅、质量、张数、格式和背景能力。默认模型使用方形、Low、1 张 PNG 和 Auto 背景。支持相应能力的模型可进行自定义像素尺寸、Extra high 或 Max 质量、透明输出，以及 SVG 或 GIF 生成。SVG 限单张生成；透明背景限 PNG 或 WebP。GIF 可用性、分辨率和动画像素预算还受所选模型和账户权限影响。[图片输出选项](https://developers.openai.com/api/docs/guides/image-generation)
+2026-11-25 核对官方文档。默认服务商为 OpenAI，新草稿默认使用 `gpt-image-2.6-flare`，也可以选择适合精细构图的 `gpt-image-2.6-sunburst`，同一模型支持生成和编辑。0.1.4 从模型目录读取画幅、质量、张数、格式和背景能力。默认模型使用方形、Low、1 张 PNG 和 Auto 背景。支持相应能力的模型可进行自定义像素尺寸、Extra high 或 Max 质量、透明输出，以及 SVG 或 GIF 生成。SVG 限单张生成；透明背景限 PNG 或 WebP。GIF 可用性、分辨率和动画像素预算还受所选模型和账户权限影响。[图片输出选项](https://developers.openai.com/api/docs/guides/image-generation)
 
-OpenAI 按所选 API 账户计费。[模型说明](https://developers.openai.com/api/docs/models/gpt-image-2) · [图片 API 指南](https://developers.openai.com/api/docs/guides/image-generation)
+OpenAI 按所选 API 账户计费。[模型说明](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare) · [图片 API 指南](https://developers.openai.com/api/docs/guides/image-generation)
 
 生成使用 `POST /v1/images/generations` 的 JSON 请求。编辑使用 `POST /v1/images/edits` 的 multipart 请求，Rust 从图库读取所选单张原图，通过 `image` 字段提交。两个端点均固定为 `https://api.openai.com`。每次提交仅发送一次请求，张数通过 `n` 指定。输入文件 MIME 按原图格式设置，输出字节按所选格式验证、逐张保存，服务商提供的 usage 与任务一起保存。[编辑接口](https://developers.openai.com/api/reference/resources/images/methods/edit)
 
