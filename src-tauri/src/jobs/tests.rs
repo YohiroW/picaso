@@ -34,7 +34,7 @@ fn write_failure_leaves_a_failed_task_without_outputs() {
     std::fs::remove_dir(temp.path().join("originals")).unwrap();
     let fixture = Fixture::default();
     assert!(submit(&lib, &fixture, &Submission::new("An icon")).is_err());
-    let job = lib.history(false).unwrap().pop().unwrap();
+    let job = lib.history(true).unwrap().pop().unwrap();
     assert_eq!(job.status, "failed");
     assert!(job.images.is_empty());
 }
@@ -81,6 +81,51 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
     assert!(submit(&library, &provider, &missing).is_err());
     assert_eq!(provider.calls.get(), 3);
     assert_eq!(library.history(false).unwrap().len(), 3);
+}
+
+#[test]
+fn deleting_an_original_preserves_siblings_edits_and_request_deduplication() {
+    let root = tempfile::tempdir().unwrap();
+    let library = Library::open(root.path()).unwrap();
+    let provider = Fixture::default();
+    let mut batch = Submission::new("Two posters");
+    batch.options.n = 2;
+    submit(&library, &provider, &batch).unwrap();
+    let images = library.history(true).unwrap().remove(0).images;
+    let id = Uuid::parse_str(&images[0]).unwrap();
+    let path = root.path().join("originals").join(format!("{id}.png"));
+    let mut edit = Submission::new("A warmer poster");
+    edit.input_id = Some(images[0].clone());
+    submit(&library, &provider, &edit).unwrap();
+    let edited = library.history(false).unwrap()[0].images[0].clone();
+
+    library.delete_image(id).unwrap();
+    library.delete_image(id).unwrap();
+    assert!(!path.exists());
+    assert!(library.original(&images[0]).is_err());
+    for recent in [false, true] {
+        let jobs = library.history(recent).unwrap();
+        assert_eq!(jobs[1].images, images[1..]);
+        assert_eq!(jobs[0].input_id, edit.input_id);
+        assert_eq!(jobs[0].images.as_slice(), std::slice::from_ref(&edited));
+    }
+    // Simulate an interruption between the committed deletion and file cleanup.
+    std::fs::write(&path, b"pending removal").unwrap();
+    drop(library);
+    let library = Library::open(root.path()).unwrap();
+    assert!(!path.exists());
+    assert!(library.original(&edited).is_ok());
+    assert!(library.original(&images[1]).is_ok());
+    library
+        .delete_image(Uuid::parse_str(&images[1]).unwrap())
+        .unwrap();
+    for recent in [false, true] {
+        let jobs = library.history(recent).unwrap();
+        assert_eq!(jobs.len(), 1);
+        assert_eq!(jobs[0].id, edit.request_id.to_string());
+    }
+    submit(&library, &provider, &batch).unwrap();
+    assert_eq!(provider.calls.get(), 2);
 }
 
 #[test]
@@ -138,6 +183,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     let old = lib.history(false).unwrap().remove(0);
     let draft = Submission::new("Interrupted request");
     assert!(std::panic::catch_unwind(|| submit(&lib, &Interrupted, &draft)).is_err());
+    assert_eq!(lib.history(true).unwrap()[0].status, "running");
     let orphan = root
         .path()
         .join("originals")
@@ -148,7 +194,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     assert!(Library::open(root.path()).is_err());
     drop(lib);
     let reopened = Library::open(root.path()).unwrap();
-    let interrupted = reopened.history(false).unwrap().remove(0);
+    let interrupted = reopened.history(true).unwrap().remove(0);
     assert_eq!(interrupted.status, "unconfirmed");
     assert!(interrupted.message.unwrap().contains("another charge"));
     assert!(!orphan.exists() && !temp.exists());

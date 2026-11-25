@@ -11,11 +11,6 @@ import { ImagePreview } from "./ImagePreview";
 type Draft = { prompt: string; modelId?: string; options?: ImageOptions; custom?: boolean };
 const emptyDraft: Draft = { prompt: "" };
 
-function recentImages(jobs: Job[]): GalleryImage[] {
-  return jobs.filter(job => job.status === "succeeded").reverse()
-    .flatMap(job => job.images.map((id, index) => ({ id, index, job }))).slice(-8);
-}
-
 function History({ jobs, open }: { jobs: Job[]; open: (image: GalleryImage) => void }) {
   if (!jobs.length) return <p className="muted">No tasks yet.</p>;
   return <ol className="task-list">{jobs.map(job => <li key={job.id}>
@@ -38,40 +33,58 @@ function HistoryIcon() {
 
 export function Workspace({ status, openSettings }: { status: CredentialStatus; openSettings: (trigger: HTMLButtonElement) => void }) {
   const [history, setHistory] = useState(false);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [snapshot, setSnapshot] = useState<{ history: boolean; jobs: Job[] }>();
+  const [pending, setPending] = useState<Job>();
+  const [settledId, setSettledId] = useState<string>();
   const [models, setModels] = useState<Model[]>([]);
   const [catalogError,setCatalogError] = useState("");
   const [revision, refresh] = useState(0);
   const [loadError, setLoadError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<GalleryImage>();
-  const [reference, setReference] = useState<GalleryImage>();
+  const [reference, setReference] = useState<string>();
+  const [unavailableReference, setUnavailableReference] = useState<string>();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({ new: emptyDraft });
   const [busy, setBusy] = useState(false);
-  const inFlight = useRef(false);
+  const inFlight = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mobileEditor, setMobileEditor] = useState(false);
   const promptField = useRef<HTMLTextAreaElement>(null);
   const [focusRequest, setFocusRequest] = useState(0);
-  const draftKey = reference?.id ?? "new";
+  const draftKey = reference ?? "new";
   const draft = drafts[draftKey] ?? emptyDraft;
   const model = draft.modelId ? models.find(m=>m.id===draft.modelId) : models[0];
   const options = draft.options ?? model?.defaults;
   const validation = model && options ? optionsError(model,options,!!reference) : undefined;
   const available = model?.provider === "fixture" || !!(status.selected && status[status.selected]);
-  const canSubmit = model && options && !validation && available && draft.prompt.trim() && (!reference || model?.canEdit) && !busy;
+  const missingReference = !!reference && reference === unavailableReference;
+  const canSubmit = model && options && !validation && available && draft.prompt.trim() && (!reference || model?.canEdit) && !missingReference && !busy;
+
+  const storedJobs = snapshot?.jobs ?? [];
+  const jobs = pending && !storedJobs.some(job => job.id === pending.id) ? [pending, ...storedJobs] : storedJobs;
+  const loading = history ? !snapshot?.history : !snapshot && !pending;
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
+    let timer: ReturnType<typeof setTimeout>;
+    async function load() {
+      try {
+        const results = await desktop.history(!history);
+        if (!active) return;
+        setSnapshot({ history, jobs: results });
+        setPending(current => current?.id === settledId ? undefined : current);
+        // A reloaded webview may see a running task without owning its submit promise.
+        if (results.some(job => job.status === "running" && job.id !== inFlight.current)) {
+          timer = setTimeout(load, 1500);
+        }
+      } catch (e) {
+        if (active) setLoadError(String(e));
+      }
+    }
     setLoadError("");
-    desktop.history(!history).then(results => {
-      if (active) setJobs(results);
-    }).catch(e => { if (active) setLoadError(String(e)); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [history, revision]);
+    void load();
+    return () => { active = false; clearTimeout(timer); };
+  }, [history, revision, settledId]);
 
   useEffect(() => {
     let active=true;
@@ -100,35 +113,56 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
   }
   function edit(image: GalleryImage) {
     setDrafts(prev => prev[image.id] ? prev : { ...prev, [image.id]: { ...draft } });
-    setReference(image);
+    setReference(image.id);
+    setUnavailableReference(undefined);
     setPreview(undefined);
     setError("");
     setNotice("");
     focusEditor();
   }
+  function reuse(job: Job) {
+    const options = { ...job.parameters, n: job.parameters.n ?? 1, background: job.parameters.background ?? "auto" };
+    setDrafts(prev => ({ ...prev, [job.inputId ?? "new"]: { prompt: job.prompt, modelId: job.model, options } }));
+    setReference(job.inputId ?? undefined);
+    setUnavailableReference(undefined);
+    setError(job.message ?? (job.status === "unconfirmed" ? "Submitting again may incur another charge." : ""));
+    setNotice("");
+    focusEditor();
+  }
+  async function deleteImage(id: string) {
+    await desktop.deleteImage(id);
+    if (id === reference) setUnavailableReference(id);
+    refresh(n => n + 1);
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!model || !options || !canSubmit || inFlight.current) return;
-    inFlight.current = true;
+    const requestId = crypto.randomUUID();
+    inFlight.current = requestId;
+    setPending({
+      id: requestId, model: model.id, provider: model.provider, prompt: draft.prompt.trim(),
+      parameters: options, inputId: reference ?? null, images: [], status: "running",
+      message: null, created: Math.floor(Date.now() / 1000),
+    });
+    setHistory(false);
     setBusy(true);
     setError("");
-    setNotice("");
+    setNotice(`Generating ${options.n} ${options.n === 1 ? "image" : "images"}…`);
     try {
-      await desktop.submit({ requestId: crypto.randomUUID(), model: model.id, prompt: draft.prompt, inputId: reference?.id, options });
+      await desktop.submit({ requestId, model: model.id, prompt: draft.prompt, inputId: reference, options });
       setDrafts(prev => {
         const next = { ...prev };
-        if (reference) delete next[reference.id];
+        if (reference) delete next[reference];
         else next.new = { ...draft, prompt: "", modelId:model.id, options };
         return next;
       });
       setReference(undefined);
-      setHistory(false);
       setNotice("Saved to your gallery.");
-    } catch (e) { setError(String(e)); }
+    } catch (e) { setError(String(e)); setNotice(""); }
     finally {
-      inFlight.current = false;
+      inFlight.current = null;
       setBusy(false);
-      refresh(n => n + 1);
+      setSettledId(requestId);
     }
   }
 
@@ -147,8 +181,10 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
           <section className="panel-section prompt-section">
             <Label className="section-title" htmlFor="prompt">{reference ? "Edit instructions" : "Prompt"}</Label>
             <div className="prompt-box">
-              {reference && <div className="reference"><img src={imageURL(reference.id)} alt="Reference image"/>
-                <span>Reference image</span><button type="button" aria-label="Remove reference" disabled={busy} onClick={newImage}>×</button></div>}
+              {reference && <div className="reference">
+                {!missingReference && <img src={imageURL(reference)} alt="Reference image" onError={() => setUnavailableReference(reference)}/>}
+                <span>{missingReference ? "Reference image unavailable" : "Reference image"}</span>
+                <button type="button" aria-label="Remove reference" disabled={busy} onClick={newImage}>×</button></div>}
               <textarea id="prompt" ref={promptField} value={draft.prompt} disabled={busy} onChange={e => updateDraft({prompt:e.target.value})}
                 placeholder={reference ? "Describe what to change…" : "Describe what you want to see…"}
                 onKeyDown={e => {
@@ -164,7 +200,7 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
             {model && !available && <p className="feedback">Choose a key to create images. <button type="button" className="link" onClick={e => openSettings(e.currentTarget)}>Settings</button></p>}
             {reference && model && !model.canEdit && <p role="alert">This model cannot edit a reference. Remove it to generate a new image.</p>}
             {error && <p role="alert" className="feedback">{error}</p>}
-            {notice && <p role="status" className="feedback">{notice}</p>}
+            {!busy && notice && <p className="feedback">{notice}</p>}
           </section>
           {catalogError && <p role="alert" className="panel-section">{catalogError} <button type="button" onClick={()=>refresh(n=>n+1)}>Reload models</button></p>}
           {!catalogError && !model && draft.modelId && models.length>0 && <p role="alert" className="panel-section">The selected model is unavailable. <button type="button" onClick={()=>updateDraft({modelId:models[0].id,options:models[0].defaults,custom:false})}>Use {models[0].displayName}</button></p>}
@@ -176,10 +212,11 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
       </aside>
       <section className="gallery-pane" aria-label={history ? "Task history" : "Recent creations"}>
         <h1>{history ? "History" : "Recent creations"}</h1>
+        <div role="status" className="sr-only">{notice}</div>
         {loadError ? <p role="alert">{loadError} <button onClick={() => refresh(n => n + 1)}>Try again</button></p> :
           loading ? <p role="status">Loading images…</p> :
           history ? <History jobs={jobs} open={setPreview}/> :
-          <Gallery images={recentImages(jobs)} open={setPreview} create={newImage} busy={busy}/>}
+          <Gallery jobs={jobs} open={setPreview} create={newImage} reuse={reuse} busy={busy} revealJobId={pending?.id} deleteImage={deleteImage}/>}
       </section>
     </main>
     {preview && <ImagePreview key={preview.id} image={preview} close={() => setPreview(undefined)} edit={() => edit(preview)} busy={busy}/>}

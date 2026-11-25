@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Workspace } from "./Workspace";
 import bundled from "../../../src-tauri/models.json";
@@ -27,7 +27,9 @@ async function openWorkspace(canEdit = true) {
   render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Prompt"), "Add a copper edge");
-  await user.click(await screen.findByRole("button", {name:"View image 2: Picaso icon"}));
+  const tile = await screen.findByRole("button", {name:"View image 2: Picaso icon"});
+  fireEvent.load(tile.querySelector("img")!);
+  await user.click(tile);
   await user.click(screen.getByRole("button", {name:"Continue editing"}));
   return {user, request};
 }
@@ -48,6 +50,62 @@ it("holds a draft when the selected model cannot edit", async () => {
   await user.click(screen.getByRole("button",{name:"Apply edit"}));
   expect(request).not.toHaveBeenCalled();
   expect((screen.getByLabelText("Edit instructions") as HTMLTextAreaElement).value).toBe("Add a copper edge");
+});
+
+it("copies the full prompt and returns from image-only view to the same original", async () => {
+  const { user, request } = await openWorkspace();
+  const job = { ...original, prompt: "保留纹理\n  Second line — 完整文本" };
+  vi.mocked(desktop.history).mockResolvedValue([job]);
+  await user.click(screen.getByRole("button", { name: "History" }));
+  await user.click(await screen.findByRole("button", { name: /^View image 2: 保留纹理/ }));
+  const details = screen.getByRole("dialog", { name: "Image preview" });
+  await user.click(within(details).getByRole("button", { name: "Copy prompt" }));
+  expect(await navigator.clipboard.readText()).toBe(job.prompt);
+  expect(within(details).getByRole("status").textContent).toBe("Prompt copied.");
+  await user.click(within(details).getByRole("button", { name: "View image only" }));
+  const viewer = screen.getByRole("dialog", { name: "Image only" });
+  expect(within(viewer).getByRole("img").getAttribute("src")).toBe("/image/a2");
+  expect(within(viewer).queryByText("Copy")).toBeNull();
+  expect(within(viewer).queryByText("Continue editing")).toBeNull();
+  fireEvent(viewer, new Event("cancel", { cancelable: true }));
+  expect(within(details).getByRole("button", { name: "View image only" })).toBe(document.activeElement);
+  await user.click(within(details).getByRole("button", { name: "Close" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(request).not.toHaveBeenCalled();
+});
+
+it("confirms deletion of the chosen original, keeps its sibling and refreshes History", async () => {
+  const { user, request } = await openWorkspace();
+  const remove = vi.spyOn(desktop, "deleteImage").mockRejectedValueOnce("Couldn’t erase the file.")
+    .mockImplementation(async id => {
+      vi.mocked(desktop.history).mockResolvedValue([{ ...original, images: original.images.filter(image => image !== id) }]);
+    });
+  const tile = screen.getByRole("button", { name: "View image 2: Picaso icon" });
+  fireEvent.contextMenu(tile, { clientX: 80, clientY: 100 });
+  await user.click(await screen.findByRole("menuitem", { name: "Delete image…" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(remove).not.toHaveBeenCalled();
+
+  tile.focus();
+  await user.keyboard("{Shift>}{F10}{/Shift}");
+  await user.click(await screen.findByRole("menuitem", { name: "Delete image…" }));
+  const confirm = screen.getByRole("dialog", { name: "Delete this image?" });
+  await user.click(within(confirm).getByRole("button", { name: "Delete image" }));
+  expect(within(confirm).getByRole("alert").textContent).toContain("Couldn’t erase");
+  await user.click(within(confirm).getByRole("button", { name: "Delete image" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(remove.mock.calls).toEqual([["a2"], ["a2"]]);
+  expect(screen.getByText("Reference image unavailable")).toBeTruthy();
+  expect(screen.getByLabelText("Edit instructions")).toHaveProperty("value", "Add a copper edge");
+  expect(screen.getByRole("button", { name: "Apply edit" })).toHaveProperty("disabled", true);
+  for (const view of ["Recent creations", "Task history"]) {
+    if (view === "Task history") await user.click(screen.getByRole("button", { name: "History" }));
+    const region = within(screen.getByRole("region", { name: view }));
+    const remaining = await region.findByRole("button", { name: "View image 1: Picaso icon" });
+    expect(remaining.querySelector("img")?.getAttribute("src")).toBe("/image/a1");
+    expect(region.queryByRole("button", { name: /^View image 2/ })).toBeNull();
+  }
+  expect(request).not.toHaveBeenCalled();
 });
 
 it("does not submit an edit while an input method is composing text", async () => {
@@ -75,8 +133,9 @@ it("limits the studio by image count and preserves drafts through full task hist
   const images = await screen.findAllByRole("button", { name: /^View image/ });
   expect(images).toHaveLength(8);
   expect(images[0].getAttribute("aria-label")).toContain("Study 3");
+  fireEvent.load(images[0].querySelector("img")!);
   expect(images[0].textContent).toBe("Study 3");
-  expect(images[7].nextElementSibling).toBe(screen.getByRole("button",{name:"New image"}));
+  expect(images[7].parentElement?.nextElementSibling).toBe(screen.getByRole("button",{name:"New image"}));
   const prompt = screen.getByLabelText("Prompt");
   await user.type(prompt, "New landscape");
   await user.selectOptions(screen.getByLabelText("Size & orientation"), "1536x1024");
@@ -134,4 +193,88 @@ it("submits the selected catalog model, custom dimensions, count, format and bac
   expect(submit.mock.calls[0][0]).toMatchObject({model:"gpt-image-2.6-sunburst",prompt:"Paper icon",options:{
     size:"1600x1024",quality:"xhigh",n:3,output_format:"webp",background:"transparent"
   }});
+});
+
+it.each([false, true])("replaces three landscape placeholders in an eight-image gallery (visit History: %s)", async visitHistory => {
+  vi.stubGlobal("__TAURI_INTERNALS__", { convertFileSrc: (id: string) => "/image/" + id });
+  const jobs = Array.from({ length: 8 }, (_, i) => ({
+    ...original, id: "old-" + i, images: ["image-" + i], prompt: "Study " + i,
+  }));
+  vi.spyOn(desktop, "history").mockImplementation(async recent => jobs.slice(0, recent ? 8 : undefined));
+  vi.spyOn(desktop, "models").mockResolvedValue(bundled.models);
+  let finish: () => void;
+  vi.spyOn(desktop, "submit").mockImplementation(draft => {
+    const job = { ...original, id: draft.requestId, parameters: draft.options, prompt: draft.prompt, images: [] as string[], status: "running" };
+    jobs.unshift(job);
+    return new Promise(resolve => {
+      finish = () => {
+        job.images = ["hill-1", "hill-2", "hill-3"];
+        job.status = "succeeded";
+        resolve(job.id);
+      };
+    });
+  });
+  render(<Workspace status={{selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  const user = userEvent.setup();
+  expect(await screen.findAllByRole("button", { name: /^View image/ })).toHaveLength(8);
+  await user.type(screen.getByLabelText("Prompt"), "Wooded hills");
+  await user.selectOptions(screen.getByLabelText("Size & orientation"), "1536x1024");
+  fireEvent.change(screen.getByRole("slider"), { target: { value: "3" } });
+  await user.click(screen.getByRole("button", { name: "Generate 3 images" }));
+  const placeholders = screen.getAllByText("Generating…").map(label => label.parentElement!);
+  expect(placeholders).toHaveLength(3);
+  expect(screen.getByRole("status").textContent).toBe("Generating 3 images…");
+  expect(screen.getAllByRole("button", { name: /^View image/ })).toHaveLength(5);
+  const positions = placeholders.map(tile => {
+    expect(tile.querySelector("button")).toBeNull();
+    expect(parseFloat(tile.style.width) / parseFloat(tile.style.height)).toBeCloseTo(1.5);
+    return tile.style.cssText;
+  });
+  const history = screen.getByRole("button", { name: "History" });
+  if (visitHistory) {
+    await user.click(history);
+    await screen.findByText("running");
+    expect(within(screen.getByRole("list")).getAllByText("Wooded hills")).toHaveLength(1);
+  }
+  await act(async () => finish());
+  if (visitHistory) {
+    expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^View image/ })).toHaveLength(11);
+    await user.click(history);
+  }
+  const results = await screen.findAllByRole("button", { name: /View image .*: Wooded hills/ });
+  expect(results).toHaveLength(3);
+  results.forEach((button, i) => {
+    const tile = button.parentElement!;
+    if (!visitHistory) expect(tile).toBe(placeholders[i]);
+    expect(tile.style.cssText).toBe(positions[i]);
+    expect(button).toHaveProperty("disabled", true);
+    expect(within(tile).getByText("Loading image…")).toBeTruthy();
+    fireEvent.load(button.querySelector("img")!);
+    expect(button).toHaveProperty("disabled", false);
+    expect(within(tile).queryByText("Loading image…")).toBeNull();
+  });
+  expect(screen.getAllByRole("button", { name: /^View image/ })).toHaveLength(8);
+  expect(screen.queryByText("Generating…")).toBeNull();
+});
+
+it.each(["failed", "unconfirmed"])("restores a %s edit as a draft for explicit resubmission", async status => {
+  vi.stubGlobal("__TAURI_INTERNALS__", { convertFileSrc: (id: string) => "/image/" + id });
+  const job = { ...original, status, id: "edit-1", inputId: "a1", prompt: "Wider sky",
+    parameters: { ...original.parameters, size: "1536x1024" }, images: [],
+    message: status === "failed" ? "Check your connection." : "Result unconfirmed. Submitting again may incur another charge." };
+  vi.spyOn(desktop, "history").mockResolvedValue([job, original]);
+  vi.spyOn(desktop, "models").mockResolvedValue([{ ...bundled.models[0], provider: "fixture", id: "fixture" }]);
+  const submit = vi.spyOn(desktop, "submit").mockResolvedValue("retry");
+  render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  const user = userEvent.setup();
+  await screen.findByText(status === "failed" ? "Generation failed" : "Result unconfirmed");
+  expect(screen.queryByText("Generating…")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Edit prompt: Wider sky" }));
+  expect(screen.getByLabelText("Edit instructions")).toHaveProperty("value", job.prompt);
+  expect(screen.getByLabelText("Size & orientation")).toHaveProperty("value", job.parameters.size);
+  expect(screen.getByRole("alert").textContent).toContain(status === "failed" ? "Check your connection" : "another charge");
+  expect(submit).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Apply edit" }));
+  expect(submit.mock.calls[0][0]).toMatchObject({ prompt: job.prompt, inputId: "a1" });
 });

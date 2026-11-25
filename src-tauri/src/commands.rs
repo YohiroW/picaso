@@ -13,6 +13,10 @@ pub fn history(library: State<Library>, recent_only: Option<bool>) -> Result<Vec
         .map_err(|e| e.to_string())
 }
 #[tauri::command]
+pub fn delete_image(library: State<Library>, id: uuid::Uuid) -> Result<(), String> {
+    library.delete_image(id).map_err(|e| e.to_string())
+}
+#[tauri::command]
 pub fn available_models(catalog: State<Catalog>) -> Result<Vec<Model>, String> {
     let models = catalog.models().map_err(|e| format!("{e:#}"))?;
     #[cfg(feature = "fixture-provider")]

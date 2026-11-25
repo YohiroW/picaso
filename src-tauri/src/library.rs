@@ -52,17 +52,23 @@ impl Library {
         };
         let mut conn = lib.connect()?;
         let tx = conn.transaction()?;
-        match tx.pragma_query_value(None, "user_version", |r| r.get::<_,i64>(0))? {
+        let version: i64 = tx.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        match version {
             0 => tx.execute_batch("CREATE TABLE jobs (
                 id TEXT PRIMARY KEY, prompt TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL,
                 status TEXT NOT NULL, parameters TEXT NOT NULL, input_id TEXT REFERENCES images(id),
                 created INTEGER NOT NULL DEFAULT(unixepoch()), message TEXT, usage TEXT);
                 CREATE TABLE images (id TEXT PRIMARY KEY, job TEXT NOT NULL REFERENCES jobs(id), format TEXT NOT NULL DEFAULT 'png');
-                CREATE INDEX images_job ON images(job);
-                PRAGMA user_version=2;")?,
-            1 => tx.execute_batch("ALTER TABLE images ADD COLUMN format TEXT NOT NULL DEFAULT 'png'; PRAGMA user_version=2;")?,
-            2 => (),
+                CREATE INDEX images_job ON images(job);")?,
+            1 => tx.execute_batch("ALTER TABLE images ADD COLUMN format TEXT NOT NULL DEFAULT 'png';")?,
+            2 | 3 => (),
             _ => bail!("This library needs a newer version of Picaso."),
+        }
+        if version < 3 {
+            tx.execute_batch(
+                "ALTER TABLE images ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;
+                              PRAGMA user_version=3;",
+            )?;
         }
         tx.execute(
             "UPDATE jobs SET status='unconfirmed', message=?1 WHERE status='running'",
@@ -189,14 +195,22 @@ impl Library {
     fn has_image(&self, id: &str) -> Result<bool> {
         Ok(self
             .connect()?
-            .query_row("SELECT 1 FROM images WHERE id=?1", [id], |_| Ok(()))
+            .query_row(
+                "SELECT 1 FROM images WHERE id=?1 AND deleted=0",
+                [id],
+                |_| Ok(()),
+            )
             .optional()?
             .is_some())
     }
     pub fn image_format(&self, id: &str) -> Result<Format> {
         let ext: String = self
             .connect()?
-            .query_row("SELECT format FROM images WHERE id=?1", [id], |r| r.get(0))
+            .query_row(
+                "SELECT format FROM images WHERE id=?1 AND deleted=0",
+                [id],
+                |r| r.get(0),
+            )
             .optional()?
             .context("This image is missing from the library.")?;
         Format::parse(&ext).context("Unknown library image format.")
@@ -232,17 +246,43 @@ impl Library {
         tmp.persist(dest)?;
         Ok(())
     }
+    pub fn delete_image(&self, id: Uuid) -> Result<()> {
+        // Keep the ID for edit lineage and submission deduplication. Commit the
+        // deletion first so startup recovery can finish an interrupted unlink.
+        let ext: String = self
+            .connect()?
+            .query_row(
+                "UPDATE images SET deleted=1 WHERE id=?1 RETURNING format",
+                [id.to_string()],
+                |r| r.get(0),
+            )
+            .optional()?
+            .context("This image is missing from the library.")?;
+        let format = Format::parse(&ext).context("Unknown library image format.")?;
+        let path = self
+            .root
+            .join("originals")
+            .join(format!("{id}.{}", format.extension()));
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e).context("Removed from the library, but the file could not be erased. Check the data folder permissions and try again."),
+        }
+    }
     pub fn history(&self, recent_only: bool) -> Result<Vec<Job>> {
         let mut conn = self.connect()?;
         let tx = conn.transaction()?;
-        // Eight successful jobs contain at least the eight most recent images when available.
+        // Each job contributes at least one image or status tile to the recent gallery.
         let filter = if recent_only {
-            "WHERE status='succeeded' ORDER BY created DESC,rowid DESC LIMIT 8"
+            "ORDER BY created DESC,rowid DESC LIMIT 8"
         } else {
             "ORDER BY created DESC,rowid DESC"
         };
-        let mut stmt = tx.prepare(&format!("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs {filter}"))?;
-        let mut outputs = tx.prepare("SELECT id FROM images WHERE job=?1 ORDER BY rowid")?;
+        let mut stmt = tx.prepare(&format!("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs
+            WHERE status != 'succeeded' OR EXISTS (SELECT 1 FROM images WHERE job=jobs.id AND deleted=0)
+            {filter}"))?;
+        let mut outputs =
+            tx.prepare("SELECT id FROM images WHERE job=?1 AND deleted=0 ORDER BY rowid")?;
         let mut rows = stmt.query([])?;
         let mut jobs = Vec::new();
         while let Some(row) = rows.next()? {

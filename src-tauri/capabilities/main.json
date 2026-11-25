@@ -12,6 +12,7 @@
     "allow-remove-key",
     "allow-open-key-portal",
     "allow-history",
+    "allow-delete-image",
     "allow-current-model",
     "allow-available-models",
     "allow-submit-job",

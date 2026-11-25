@@ -1,6 +1,6 @@
 {
   "name": "picaso",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@radix-ui/react-context-menu": "^2.4.1",
     "@radix-ui/react-label": "^2.1.17",
     "@tauri-apps/api": "^2",
     "react": "^19",

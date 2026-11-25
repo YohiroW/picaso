@@ -28,6 +28,7 @@ export const desktop = {
   models: () => invoke<Model[]>("available_models"),
   submit: (draft: { requestId: string; model: string; prompt: string; inputId?: string; options: ImageOptions }) => invoke<string>("submit_job", { draft }),
   export: (id: string) => invoke<boolean>("export_image", { id }),
+  deleteImage: (id: string) => invoke<void>("delete_image", { id }),
   status: () => invoke<CredentialStatus>("credential_status"),
   select: (source: Source) => invoke<CredentialStatus>("select_source", { source }),
   save: (key: string) => invoke<CredentialStatus>("save_key", { key }),

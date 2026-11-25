@@ -116,6 +116,7 @@ fn main() {
             remove_key,
             open_key_portal,
             history,
+            delete_image,
             current_model,
             available_models,
             submit_job,
