@@ -4,10 +4,10 @@ Picaso 是用于 Apple Silicon Mac 的本地图像工作台。使用自己的 Op
 
 ## 安装与使用
 
-1. 打开 [0.1.4 开发版 DMG](src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Picaso_0.1.4_aarch64.dmg)，把 Picaso 拖入 Applications。最低系统版本为 macOS 14。开发版采用 ad hoc 签名。
-2. 首次打开时选择密钥来源。如果窗口检测到 `OPENAI_API_KEY`，可以点击 **Use environment key**。如果只在终端中设置了环境变量，可以从该终端启动 `~/Applications/Picaso.app/Contents/MacOS/picaso`（安装在系统 Applications 时去掉 `~`）。也可以在 **Key settings** 输入自己的 API Key，点击 **Save and use key** 存入当前用户的 macOS 钥匙串。可在此更换、切换或删除密钥。API 额度由 OpenAI API 账户提供，与 ChatGPT 订阅分别计费。
+1. 打开 [0.1.5 开发版 DMG](src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/Picaso_0.1.5_aarch64.dmg)，把 Picaso 拖入 Applications。最低系统版本为 macOS 14。开发版采用 ad hoc 签名。
+2. 首次打开时选择密钥来源。如果窗口检测到 `OPENAI_API_KEY`，可以点击 **Use environment key**。如果只在终端中设置了环境变量，可以从该终端启动 `~/Applications/Picaso.app/Contents/MacOS/picaso`（安装在系统 Applications 时去掉 `~`）。也可以从右上角齿轮打开 **Settings → Saved key**，输入自己的 API Key，点击 **Save and use key** 存入当前用户的 macOS 钥匙串。可在此更换、切换或删除密钥。API 额度由 OpenAI API 账户提供，与 ChatGPT 订阅分别计费。
 3. 在左栏 **Prompt** 描述图片，选择模型、画幅、质量和张数（1–4）。自定义画幅可填写像素宽高；**Advanced** 可选择输出格式与背景，点击 **Generate image**。右侧按时间展示最近 8 张作品。末尾 **＋** 可回到新建草稿。右上角 **History** 可查看所有任务，包括失败或结果未确认的任务。点击任意一张作品可预览原图。点击 **Continue editing**，在 **Edit instructions** 中输入修改要求，再点 **Apply edit** 或按 ⌘↩。新结果和原图都会保留。
-4. **Save original…** 可将选中的原始文件 保存到自行选择的位置。预览窗口显示历史任务的提示词和实际参数。查看或导出旧图无需联网，首次使用也可以选择 **Browse without a key**。
+4. **Save original…** 可将选中的原始文件 保存到自行选择的位置。预览窗口显示历史任务的提示词和实际参数。查看或导出旧图无需联网，首次使用也可以点击 **Back to workspace**。
 
 只有明确提交“生成”或“编辑”会向 OpenAI 请求图片。超时或意外退出后，如果任务显示 **unconfirmed**，上游可能已经计费，请先检查历史和账户用量再决定是否重新提交。
 

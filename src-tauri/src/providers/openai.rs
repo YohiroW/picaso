@@ -130,7 +130,7 @@ fn api_failure(status: u16, code: &str) -> Failure {
         return uncertain("OpenAI could not confirm completion.");
     }
     Failure::known(match (status,code) {
-        (401,_) => "OpenAI rejected this API key. Replace it or choose another key in Key settings.",
+        (401,_) => "OpenAI rejected this API key. Replace it or choose another key in Settings.",
         (403,_) | (_, "model_not_found") => "This account cannot use the image model. Check model access and organization verification.",
         (402,_) | (_, "insufficient_quota" | "billing_hard_limit_reached" | "billing_not_active") => "OpenAI API credit is unavailable. Check billing, balance and spending limits.",
         (429,_) => "OpenAI’s rate limit was reached. Wait before submitting again.",

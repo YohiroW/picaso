@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { ImageSettings, optionsError } from "./ImageSettings";
 import { Label } from "../../components/ui/label";
+import { SettingsIcon } from "../../components/SettingsIcon";
 import { AppBar } from "../../components/AppBar";
 import { desktop, imageURL, type CredentialStatus, type ImageOptions, type Job, type Model } from "../../lib/desktop";
 import { Gallery, type GalleryImage } from "./Gallery";
@@ -35,7 +36,7 @@ function HistoryIcon() {
   </svg>;
 }
 
-export function Workspace({ status, openSettings }: { status: CredentialStatus; openSettings: () => void }) {
+export function Workspace({ status, openSettings }: { status: CredentialStatus; openSettings: (trigger: HTMLButtonElement) => void }) {
   const [history, setHistory] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [models, setModels] = useState<Model[]>([]);
@@ -136,7 +137,7 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
       <button className="history-nav" aria-pressed={history} onClick={() => { setHistory(v => !v); setPreview(undefined); }}>
         <HistoryIcon />{history ? "Back to studio" : "History"}
       </button>
-      <button onClick={openSettings}>Key settings</button>
+      <button id="workspace-settings" className="settings-trigger" aria-label="Settings" title="Settings" onClick={e => openSettings(e.currentTarget)}><SettingsIcon/></button>
     </nav></AppBar>
     <main className="studio">
       <aside className="control-panel" aria-label="Image controls">
@@ -159,7 +160,7 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
                 <button type="submit" className="primary submit" disabled={!canSubmit}>{busy ? "Creating…" : reference ? (options && options.n>1 ? `Apply edit · ${options.n} images` : "Apply edit") : (options && options.n>1 ? `Generate ${options.n} images` : "Generate image")}<span aria-hidden="true">↑</span></button>
               </div>
             </div>
-            {model && !available && <p className="feedback">Choose a key to create images. <button type="button" className="link" onClick={openSettings}>Key settings</button></p>}
+            {model && !available && <p className="feedback">Choose a key to create images. <button type="button" className="link" onClick={e => openSettings(e.currentTarget)}>Settings</button></p>}
             {reference && model && !model.canEdit && <p role="alert">This model cannot edit a reference. Remove it to generate a new image.</p>}
             {error && <p role="alert" className="feedback">{error}</p>}
             {notice && <p role="status" className="feedback">{notice}</p>}

@@ -112,14 +112,11 @@ impl<V: Vault> Credentials<V> {
             Source::Environment => self.environment.clone(),
             Source::Keychain => self.vault.get()?,
         };
-        key.ok_or_else(|| "Your selected key is unavailable. Open Key settings to restore it or choose another source.".into())
+        key.ok_or_else(|| "Your selected key is unavailable. Open Settings to restore it or choose another source.".into())
     }
     #[cfg(any(test, not(feature = "fixture-provider")))]
     pub fn resolve(&self) -> Result<String, String> {
-        self.read_source(
-            self.selected()?
-                .ok_or("Choose a key in Key settings first.")?,
-        )
+        self.read_source(self.selected()?.ok_or("Choose a key in Settings first.")?)
     }
     pub fn select(&self, source: Source) -> Result<Status, String> {
         self.read_source(source)?;
