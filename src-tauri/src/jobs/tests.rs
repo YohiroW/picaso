@@ -12,7 +12,7 @@ fn repeated_submission_is_stored_once_and_export_survives_restart() {
     assert_eq!(fixture.calls.get(), 1);
     drop(lib);
     let reopened = Library::open(temp.path()).unwrap();
-    let jobs = reopened.history().unwrap();
+    let jobs = reopened.history(false).unwrap();
     assert_eq!(jobs.len(), 1);
     assert_eq!(jobs[0].prompt, "Folder icon");
     assert_eq!(jobs[0].provider, "fixture");
@@ -33,7 +33,7 @@ fn write_failure_leaves_a_failed_task_without_outputs() {
     std::fs::remove_dir(temp.path().join("originals")).unwrap();
     let fixture = Fixture::default();
     assert!(submit(&lib, &fixture, &Submission::new("An icon")).is_err());
-    let job = lib.history().unwrap().pop().unwrap();
+    let job = lib.history(false).unwrap().pop().unwrap();
     assert_eq!(job.status, "failed");
     assert!(job.images.is_empty());
 }
@@ -44,7 +44,7 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
     let library = Library::open(folder.path()).unwrap();
     let provider = Fixture::default();
     let parent = submit(&library, &provider, &Submission::new("Two icon studies")).unwrap();
-    let images = library.history().unwrap().remove(0).images;
+    let images = library.history(false).unwrap().remove(0).images;
     assert_eq!(images.len(), 2);
     assert_ne!(
         library.original(&images[0]).unwrap(),
@@ -54,7 +54,7 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
         let mut draft = Submission::new(text);
         draft.input_id = Some(images[1].clone());
         submit(&library, &provider, &draft).unwrap();
-        let job = library.history().unwrap().remove(0);
+        let job = library.history(false).unwrap().remove(0);
         assert_eq!(job.input_id.as_ref(), Some(&images[1]));
         // The test provider echoes the exact original supplied to an edit.
         assert_eq!(
@@ -63,7 +63,7 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
         );
     }
     assert_eq!(provider.calls.get(), 3);
-    let original = library.history().unwrap().pop().unwrap();
+    let original = library.history(false).unwrap().pop().unwrap();
     assert_eq!(original.id, parent);
     assert_eq!(original.images, images);
     std::fs::remove_file(
@@ -77,7 +77,7 @@ fn editing_the_second_original_preserves_the_first_job_and_allows_branching() {
     missing.input_id = Some(images[1].clone());
     assert!(submit(&library, &provider, &missing).is_err());
     assert_eq!(provider.calls.get(), 3);
-    assert_eq!(library.history().unwrap().len(), 3);
+    assert_eq!(library.history(false).unwrap().len(), 3);
 }
 
 #[test]
@@ -92,7 +92,7 @@ fn unsupported_model_rejects_edits_before_calling_the_provider() {
                 can_edit: false,
             }
         }
-        fn render(&self, _: &str, _: Option<&[u8]>) -> Result<Output, Failure> {
+        fn render(&self, _: &str, _: Option<&[u8]>, _: &ImageOptions) -> Result<Output, Failure> {
             panic!("unsupported edit reached the provider")
         }
     }
@@ -102,7 +102,7 @@ fn unsupported_model_rejects_edits_before_calling_the_provider() {
     draft.input_id = Some(Uuid::new_v4().to_string());
     let error = submit(&lib, &GenerateOnly, &draft).unwrap_err();
     assert!(error.to_string().contains("cannot edit"));
-    assert!(lib.history().unwrap().is_empty());
+    assert!(lib.history(false).unwrap().is_empty());
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
         fn model(&self) -> Model {
             Fixture::default().model()
         }
-        fn render(&self, _: &str, _: Option<&[u8]>) -> Result<Output, Failure> {
+        fn render(&self, _: &str, _: Option<&[u8]>, _: &ImageOptions) -> Result<Output, Failure> {
             panic!("simulate exit after dispatch")
         }
     }
@@ -121,7 +121,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     let lib = Library::open(root.path()).unwrap();
     let fixture = Fixture::default();
     submit(&lib, &fixture, &Submission::new("Finished icon")).unwrap();
-    let old = lib.history().unwrap().remove(0);
+    let old = lib.history(false).unwrap().remove(0);
     let draft = Submission::new("Interrupted request");
     assert!(std::panic::catch_unwind(|| submit(&lib, &Interrupted, &draft)).is_err());
     let orphan = root
@@ -134,7 +134,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     assert!(Library::open(root.path()).is_err());
     drop(lib);
     let reopened = Library::open(root.path()).unwrap();
-    let interrupted = reopened.history().unwrap().remove(0);
+    let interrupted = reopened.history(false).unwrap().remove(0);
     assert_eq!(interrupted.status, "unconfirmed");
     assert!(interrupted.message.unwrap().contains("another charge"));
     assert!(!orphan.exists() && !temp.exists());
@@ -171,10 +171,15 @@ fn duplicate_in_flight_request_does_not_invoke_a_second_provider() {
         fn model(&self) -> Model {
             Fixture::default().model()
         }
-        fn render(&self, p: &str, input: Option<&[u8]>) -> Result<Output, Failure> {
+        fn render(
+            &self,
+            p: &str,
+            input: Option<&[u8]>,
+            options: &ImageOptions,
+        ) -> Result<Output, Failure> {
             self.started.send(()).unwrap();
             self.resume.recv().unwrap();
-            Fixture::default().render(p, input)
+            Fixture::default().render(p, input, options)
         }
     }
     let dir = tempfile::tempdir().unwrap();
@@ -201,5 +206,25 @@ fn duplicate_in_flight_request_does_not_invoke_a_second_provider() {
         assert!(duplicate.is_err());
         assert_eq!(other.calls.get(), 0);
     });
-    assert_eq!(library.history().unwrap().len(), 1);
+    assert_eq!(library.history(false).unwrap().len(), 1);
+}
+
+#[test]
+fn chosen_options_are_validated_recorded_and_used_for_deduplication() {
+    let root = tempfile::tempdir().unwrap();
+    let lib = Library::open(root.path()).unwrap();
+    let provider = Fixture::default();
+    let mut draft = Submission::new("Portrait study");
+    draft.options.size = "1024x1536".into();
+    draft.options.quality = "medium".into();
+    submit(&lib, &provider, &draft).unwrap();
+    let job = lib.history(true).unwrap().pop().unwrap();
+    assert_eq!(job.parameters["size"], "1024x1536");
+    assert_eq!(job.parameters["quality"], "medium");
+    draft.options.quality = "high".into();
+    assert!(submit(&lib, &provider, &draft).is_err());
+    draft.request_id = Uuid::new_v4();
+    draft.options.size = "unexpected".into();
+    assert!(submit(&lib, &provider, &draft).is_err());
+    assert_eq!(provider.calls.get(), 1);
 }

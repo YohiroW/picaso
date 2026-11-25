@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { KeySettings } from "./features/onboarding/KeySettings";
 import { desktop, type CredentialStatus } from "./lib/desktop";
 import { Workspace } from "./features/workspace/Workspace";
-import icon from "../src-tauri/icons/icon.png";
+import { AppBar } from "./components/AppBar";
 
 export function App() {
   const [status, setStatus] = useState<CredentialStatus>();
@@ -18,9 +18,7 @@ export function App() {
     desktop.status().then(setStatus).catch(e => setError(String(e)));
   }
   return <>
-    <header className="appbar"><div className="brand"><img src={icon} alt="" width="28" height="28" />Picaso</div>
-      {status && !settings && <button onClick={openSettings}>Key settings</button>}
-    </header>
+    {(!status || settings) && <AppBar/>}
     {!status ? <main><p role="status">{error || "Opening Picaso…"}</p>{error && <button onClick={load}>Try again</button>}</main> :
       <>
         {settings && <KeySettings status={status} onChange={setStatus} onClose={() => setSettings(false)} />}

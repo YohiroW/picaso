@@ -9,6 +9,8 @@ pub struct Submission {
     pub request_id: Uuid,
     pub prompt: String,
     pub input_id: Option<String>,
+    #[serde(default)]
+    pub options: ImageOptions,
 }
 impl Submission {
     #[cfg(test)]
@@ -17,17 +19,41 @@ impl Submission {
             request_id: Uuid::new_v4(),
             prompt: prompt.into(),
             input_id: None,
+            options: ImageOptions::default(),
         }
     }
 }
-pub const SIZE: &str = "1024x1024";
-pub const QUALITY: &str = "low";
+#[derive(Deserialize)]
+pub struct ImageOptions {
+    pub size: String,
+    pub quality: String,
+}
+impl Default for ImageOptions {
+    fn default() -> Self {
+        Self {
+            size: "1024x1024".into(),
+            quality: "low".into(),
+        }
+    }
+}
+impl ImageOptions {
+    fn validate(&self) -> Result<()> {
+        if !matches!(self.size.as_str(), "1024x1024" | "1536x1024" | "1024x1536") {
+            bail!("Choose a supported image size.");
+        }
+        if !matches!(self.quality.as_str(), "low" | "medium" | "high") {
+            bail!("Choose a supported quality.");
+        }
+        Ok(())
+    }
+}
 
 pub fn submit(lib: &Library, provider: &dyn Provider, draft: &Submission) -> Result<String> {
     let prompt = draft.prompt.trim();
     if prompt.is_empty() {
         bail!("Write a prompt before submitting.");
     }
+    draft.options.validate()?;
     let model = provider.model();
     if draft.input_id.is_some() && !model.can_edit {
         bail!(
@@ -39,7 +65,7 @@ pub fn submit(lib: &Library, provider: &dyn Provider, draft: &Submission) -> Res
         .as_deref()
         .map(|id| lib.original(id))
         .transpose()?;
-    let params = serde_json::json!({"size": SIZE, "quality": QUALITY, "output_format":"png","n":1});
+    let params = serde_json::json!({"size": draft.options.size, "quality": draft.options.quality, "output_format":"png","n":1});
     if !lib.reserve(
         &draft.request_id,
         prompt,
@@ -49,7 +75,7 @@ pub fn submit(lib: &Library, provider: &dyn Provider, draft: &Submission) -> Res
     )? {
         return Ok(draft.request_id.to_string());
     }
-    match provider.render(prompt, original.as_deref()) {
+    match provider.render(prompt, original.as_deref(), &draft.options) {
         Ok(output) => {
             if let Err(e) = lib.finish(&draft.request_id, output) {
                 let message = format!("Couldn’t save the result: {e}. Check your data folder and free space. Submitting again may incur another charge.");

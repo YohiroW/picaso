@@ -1,6 +1,6 @@
 # OpenAI 图片适配器
 
-2026-11-25 核对官方文档。默认服务商为 OpenAI，模型为 `gpt-image-2`，同一模型支持生成和编辑。当前版本固定请求一张 1024 × 1024、low 质量的 PNG，便于预测一次提交的范围。OpenAI 按所选 API 账户计费。[模型说明](https://developers.openai.com/api/docs/models/gpt-image-2) · [图片 API 指南](https://developers.openai.com/api/docs/guides/image-generation)
+2026-11-25 核对官方文档。默认服务商为 OpenAI，模型为 `gpt-image-2`，同一模型支持生成和编辑。0.1.3 支持方形（1024 × 1024）、横向（1536 × 1024）、纵向（1024 × 1536），质量可选 low、medium、high。默认方形、low，每次请求一张 PNG。生成与编辑均按所选参数提交并记录到历史。OpenAI 按所选 API 账户计费。[模型说明](https://developers.openai.com/api/docs/models/gpt-image-2) · [图片 API 指南](https://developers.openai.com/api/docs/guides/image-generation)
 
 生成使用 `POST /v1/images/generations` 的 JSON 请求。编辑使用 `POST /v1/images/edits` 的 multipart 请求，Rust 从图库读取所选单张原图，通过 `image` 字段提交。两个端点均固定为 `https://api.openai.com`。响应中的 base64 解码为原始 PNG，服务商提供的 usage 与任务一起保存。[编辑接口](https://developers.openai.com/api/reference/resources/images/methods/edit)
 

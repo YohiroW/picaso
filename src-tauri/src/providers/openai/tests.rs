@@ -45,7 +45,14 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
     for original in [None, Some(png.as_slice())] {
         let (provider,server)=serve(200,serde_json::json!({"data":[{"b64_json":STANDARD.encode(png)}],"usage":{"total_tokens":23}}).to_string());
         let output = provider
-            .render("Clay P icon", original)
+            .render(
+                "Clay P icon",
+                original,
+                &ImageOptions {
+                    size: "1536x1024".into(),
+                    quality: "high".into(),
+                },
+            )
             .map_err(|e| e.message)
             .unwrap();
         let (header, data) = server.join().unwrap();
@@ -67,8 +74,8 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
             for (name, value) in [
                 ("prompt", "Clay P icon"),
                 ("model", MODEL.id),
-                ("size", "1024x1024"),
-                ("quality", "low"),
+                ("size", "1536x1024"),
+                ("quality", "high"),
                 ("n", "1"),
                 ("output_format", "png"),
             ] {
@@ -79,7 +86,7 @@ fn sends_json_or_one_original_multipart_to_the_official_paths() {
             assert!(header.starts_with("POST /v1/images/generations "));
             assert_eq!(
                 serde_json::from_slice::<serde_json::Value>(&data).unwrap(),
-                serde_json::json!({"model":MODEL.id,"prompt":"Clay P icon","size":"1024x1024","quality":"low","n":1,"output_format":"png"})
+                serde_json::json!({"model":MODEL.id,"prompt":"Clay P icon","size":"1536x1024","quality":"high","n":1,"output_format":"png"})
             );
         }
     }
@@ -97,7 +104,10 @@ fn rejected_requests_produce_actionable_messages_without_echoing_server_secrets(
             status,
             serde_json::json!({"error":{"code":code,"message":"fictional-http-key"}}).to_string(),
         );
-        let error = provider.render("icon", None).err().unwrap();
+        let error = provider
+            .render("icon", None, &ImageOptions::default())
+            .err()
+            .unwrap();
         server.join().unwrap();
         assert!(error.message.contains(fragment));
         assert!(!error.message.contains("fictional-http-key"));
@@ -113,7 +123,10 @@ fn a_refused_connection_has_a_network_action_and_no_secret() {
     let mut provider = OpenAi::new("fictional-network-key".into()).unwrap();
     provider.test_origin = Some(endpoint);
     provider.client = Client::builder().no_proxy().build().unwrap();
-    let error = provider.render("icon", None).err().unwrap();
+    let error = provider
+        .render("icon", None, &ImageOptions::default())
+        .err()
+        .unwrap();
     assert!(error.message.contains("connection"));
     assert!(!error.message.contains("fictional-network-key"));
 }

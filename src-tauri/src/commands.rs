@@ -6,8 +6,10 @@ use crate::{
 use tauri::State;
 
 #[tauri::command]
-pub fn history(library: State<Library>) -> Result<Vec<Job>, String> {
-    library.history().map_err(|e| e.to_string())
+pub fn history(library: State<Library>, recent_only: Option<bool>) -> Result<Vec<Job>, String> {
+    library
+        .history(recent_only.unwrap_or(false))
+        .map_err(|e| e.to_string())
 }
 #[tauri::command]
 pub fn current_model() -> Model {

@@ -14,11 +14,16 @@ export interface Job {
   parameters: {size: string; quality: string; output_format: string};
   status: string; message: string | null; inputId: string | null; created: number;
 }
+export interface ImageOptions {
+  size: "1024x1024" | "1536x1024" | "1024x1536";
+  quality: "low" | "medium" | "high";
+}
+
 export const imageURL = (id: string) => convertFileSrc(id, "picaso-image");
 export const desktop = {
-  history: () => invoke<Job[]>("history"),
+  history: (recentOnly = false) => invoke<Job[]>("history", { recentOnly }),
   model: () => invoke<Model>("current_model"),
-  submit: (draft: { requestId: string; prompt: string; inputId?: string }) => invoke<string>("submit_job", { draft }),
+  submit: (draft: { requestId: string; prompt: string; inputId?: string; options: ImageOptions }) => invoke<string>("submit_job", { draft }),
   export: (id: string) => invoke<boolean>("export_image", { id }),
   status: () => invoke<CredentialStatus>("credential_status"),
   select: (source: Source) => invoke<CredentialStatus>("select_source", { source }),

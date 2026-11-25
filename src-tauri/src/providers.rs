@@ -1,5 +1,6 @@
 #[cfg(any(test, not(feature = "fixture-provider")))]
 pub mod openai;
+use crate::jobs::ImageOptions;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Serialize)]
@@ -28,7 +29,12 @@ impl Failure {
 }
 pub trait Provider {
     fn model(&self) -> Model;
-    fn render(&self, prompt: &str, original: Option<&[u8]>) -> Result<Output, Failure>;
+    fn render(
+        &self,
+        prompt: &str,
+        original: Option<&[u8]>,
+        options: &ImageOptions,
+    ) -> Result<Output, Failure>;
 }
 
 #[cfg(any(test, feature = "fixture-provider"))]
@@ -45,7 +51,12 @@ impl Provider for Fixture {
             can_edit: true,
         }
     }
-    fn render(&self, _: &str, original: Option<&[u8]>) -> Result<Output, Failure> {
+    fn render(
+        &self,
+        _: &str,
+        original: Option<&[u8]>,
+        _: &ImageOptions,
+    ) -> Result<Output, Failure> {
         self.calls.set(self.calls.get() + 1);
         let images = if let Some(bytes) = original {
             vec![bytes.to_vec()]

@@ -1,8 +1,5 @@
 use super::{Failure, Model, Output, Provider};
-use crate::{
-    jobs::{QUALITY, SIZE},
-    library::UNCERTAIN,
-};
+use crate::{jobs::ImageOptions, library::UNCERTAIN};
 use base64::{engine::general_purpose::STANDARD, Engine};
 use reqwest::blocking::{multipart, Client};
 use serde::Deserialize;
@@ -54,7 +51,12 @@ impl Provider for OpenAi {
     fn model(&self) -> Model {
         MODEL
     }
-    fn render(&self, prompt: &str, original: Option<&[u8]>) -> Result<Output, Failure> {
+    fn render(
+        &self,
+        prompt: &str,
+        original: Option<&[u8]>,
+        options: &ImageOptions,
+    ) -> Result<Output, Failure> {
         let api = API;
         #[cfg(test)]
         let api = self.test_origin.as_deref().unwrap_or(api);
@@ -63,11 +65,11 @@ impl Provider for OpenAi {
                 let image = multipart::Part::bytes(bytes.to_owned()).file_name("original.png")
                     .mime_str("image/png").expect("static PNG MIME type");
                 let form = multipart::Form::new().text("model",MODEL.id).text("prompt",prompt.to_owned())
-                    .text("size",SIZE).text("quality",QUALITY).text("output_format","png").text("n","1").part("image",image);
+                    .text("size",options.size.clone()).text("quality",options.quality.clone()).text("output_format","png").text("n","1").part("image",image);
                 self.client.post(format!("{api}/edits")).multipart(form)
             },
             None => self.client.post(format!("{api}/generations")).json(&serde_json::json!({
-                "model":MODEL.id, "prompt":prompt, "size":SIZE, "quality":QUALITY, "output_format":"png", "n":1
+                "model":MODEL.id, "prompt":prompt, "size":options.size, "quality":options.quality, "output_format":"png", "n":1
             })),
         };
         let response = request.bearer_auth(&self.key).send().map_err(|e| {

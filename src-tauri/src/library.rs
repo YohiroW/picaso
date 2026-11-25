@@ -211,10 +211,16 @@ impl Library {
         tmp.persist(dest)?;
         Ok(())
     }
-    pub fn history(&self) -> Result<Vec<Job>> {
+    pub fn history(&self, recent_only: bool) -> Result<Vec<Job>> {
         let mut conn = self.connect()?;
         let tx = conn.transaction()?;
-        let mut stmt = tx.prepare("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs ORDER BY created DESC,rowid DESC")?;
+        // Eight successful jobs contain at least the eight most recent images when available.
+        let filter = if recent_only {
+            "WHERE status='succeeded' ORDER BY created DESC,rowid DESC LIMIT 8"
+        } else {
+            "ORDER BY created DESC,rowid DESC"
+        };
+        let mut stmt = tx.prepare(&format!("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs {filter}"))?;
         let mut outputs = tx.prepare("SELECT id FROM images WHERE job=?1 ORDER BY rowid")?;
         let mut rows = stmt.query([])?;
         let mut jobs = Vec::new();
