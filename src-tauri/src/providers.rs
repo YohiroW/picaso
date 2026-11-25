@@ -26,7 +26,7 @@ impl Failure {
 }
 pub trait Provider {
     fn model(&self) -> Model;
-    fn generate(&self, prompt: &str) -> Result<Output, Failure>;
+    fn render(&self, prompt: &str, original: Option<&[u8]>) -> Result<Output, Failure>;
 }
 
 #[cfg(any(test, feature = "fixture-provider"))]
@@ -40,13 +40,24 @@ impl Provider for Fixture {
         Model {
             provider: "fixture",
             id: "test-image",
-            can_edit: false,
+            can_edit: true,
         }
     }
-    fn generate(&self, _: &str) -> Result<Output, Failure> {
+    fn render(&self, _: &str, original: Option<&[u8]>) -> Result<Output, Failure> {
         self.calls.set(self.calls.get() + 1);
+        let images = if let Some(bytes) = original {
+            vec![bytes.to_vec()]
+        } else {
+            let first = include_bytes!("../icons/icon.png");
+            let flipped = image::load_from_memory(first).expect("fixture PNG").fliph();
+            let mut second = std::io::Cursor::new(Vec::new());
+            flipped
+                .write_to(&mut second, image::ImageFormat::Png)
+                .expect("fixture PNG");
+            vec![first.to_vec(), second.into_inner()]
+        };
         Ok(Output {
-            images: vec![include_bytes!("../icons/icon.png").to_vec()],
+            images,
             usage: None,
         })
     }

@@ -16,7 +16,7 @@ export const imageURL = (id: string) => convertFileSrc(id, "picaso-image");
 export const desktop = {
   history: () => invoke<Job[]>("history"),
   model: () => invoke<Model>("current_model"),
-  submit: (draft: { requestId: string; prompt: string }) => invoke<string>("submit_job", { draft }),
+  submit: (draft: { requestId: string; prompt: string; inputId?: string }) => invoke<string>("submit_job", { draft }),
   export: (id: string) => invoke<boolean>("export_image", { id }),
   status: () => invoke<CredentialStatus>("credential_status"),
   select: (source: Source) => invoke<CredentialStatus>("select_source", { source }),

@@ -63,3 +63,6 @@ textarea { resize: vertical; min-height: 76px; }
   .desk { width: 100%; }
   .viewer { min-height: 150px; }
 }
+.reference { display: flex; gap: 9px; align-items: center; padding: 8px 10px; background: var(--surface); border-left: 3px solid var(--accent); font-size: .87rem; }
+.reference img { width: 40px; height: 40px; object-fit: cover; }
+.reference button { margin-left: auto; }

@@ -7,6 +7,8 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
   const [selectedId, setSelectedId] = useState<string>();
   const [imageId, setImageId] = useState<string>();
   const [prompt, setPrompt] = useState("");
+  const [reference, setReference] = useState<string>();
+  const promptField = useRef<HTMLTextAreaElement>(null);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
   const [error, setError] = useState("");
@@ -26,12 +28,13 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
   }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || !available || inFlight.current) return;
+    if ((reference && !model?.canEdit) || !prompt.trim() || !available || inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(""); setNotice("");
     try {
-      const id = await desktop.submit({requestId: crypto.randomUUID(), prompt});
+      const id = await desktop.submit({requestId: crypto.randomUUID(), prompt, inputId: reference});
+      setPrompt(""); setReference(undefined);
       const jobs = await desktop.history();
-      setItems(jobs); select(jobs.find(job => job.id === id)); setPrompt("");
+      setItems(jobs); select(jobs.find(job => job.id === id));
     } catch (e) {
       setError(String(e));
       try { setItems(await desktop.history()); } catch { /* Keep the last visible history. */ }
@@ -55,12 +58,20 @@ export function Workspace({status, openSettings}: {status: CredentialStatus; ope
     </section>
     {selected && <div className="details"><h2>{selected.prompt}</h2><p>{selected.provider} · {selected.model}</p>
       {selected.images.length > 1 && <div className="variants">{selected.images.map((id,i) => <button key={id} aria-pressed={id === imageId} aria-label={`Select image ${i+1}`} onClick={() => select(selected,id)}><img alt="" src={imageURL(id)} /></button>)}</div>}
-      {imageId && <button onClick={save}>Save original…</button>}</div>}
+      {imageId && <div className="actions"><button disabled={busy} onClick={() => {
+        setReference(imageId); setError(""); setNotice(""); promptField.current?.focus();
+      }}>Continue editing</button><button onClick={save}>Save original…</button></div>}</div>}
     <form className="composer" onSubmit={submit}>
-      <label htmlFor="prompt">Image prompt</label>
-      <textarea id="prompt" rows={3} value={prompt} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder="Describe your image…" />
+      {reference && <div className="reference"><img src={imageURL(reference)} alt="Selected original for editing" /><span>Reference image</span><button type="button" disabled={busy} onClick={() => setReference(undefined)}>Remove reference</button></div>}
+      {reference && model && !model.canEdit && <p role="alert">This model cannot edit a reference. Remove it to generate a new image.</p>}
+      <label htmlFor="prompt">{reference ? "Edit instructions" : "Image prompt"}</label>
+      <textarea ref={promptField} id="prompt" onKeyDown={e => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+          e.preventDefault(); e.currentTarget.form?.requestSubmit();
+        }
+      }} rows={3} value={prompt} disabled={busy} onChange={e => setPrompt(e.target.value)} placeholder={reference ? "What would you like to change?" : "Describe your image…"} />
       <div className="submit-row"><small>{model?.provider === "fixture" ? "Local test images" : "OpenAI · " + (model?.id ?? "…")}</small>
-        <button className="primary" disabled={busy || !available || !prompt.trim()}>{busy ? "Creating…" : "Generate image"}</button></div>
+        <button className="primary" disabled={busy || !available || !prompt.trim() || (!!reference && !model?.canEdit)}>{busy ? "Creating…" : reference ? "Apply edit" : "Generate image"}</button></div>
       {!available && model && <p>Choose an available key to generate images. <button type="button" className="link" onClick={openSettings}>Key settings</button></p>}
     </form>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
