@@ -30,9 +30,9 @@ label { display: block; margin: 10px 0 4px; font-weight: 550; }
 [role="alert"] { color: #843524; overflow-wrap: anywhere; }
 code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
 .appbar nav { display: flex; align-items: center; gap: 10px; }
-.appbar nav button { height: 32px; }
-.history-nav { display: inline-flex; align-items: center; gap: 7px; }
-.history-nav[aria-pressed="true"] { background: var(--surface); }
+.appbar .toolbar-icon { display: grid; place-items: center; width: 34px; height: 32px; padding: 0; background: transparent; border-color: transparent; }
+.appbar .toolbar-icon:hover { background: var(--surface); border-color: var(--line); }
+.appbar .toolbar-icon[aria-pressed="true"] { color: var(--accent); background: #eee6dd; border-color: #cfc1b4; }
 .studio { display: grid; grid-template-columns: clamp(304px, 33%, 408px) minmax(0, 1fr); padding: 0; height: calc(100dvh - 55px); }
 .control-panel, .gallery-pane { min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .control-panel { background: var(--surface); border-right: 1px solid var(--line); }
@@ -118,8 +118,6 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
 .option-hint { font-size: .8rem; }
 
 /* Settings use the same warm surfaces as the studio. */
-.appbar .settings-trigger { display: grid; place-items: center; width: 34px; padding: 0; background: transparent; border-color: transparent; }
-.appbar .settings-trigger:hover { background: var(--surface); border-color: var(--line); }
 .settings-layout {
   display: grid; grid-template-columns: clamp(196px, 23vw, 268px) minmax(0, 1fr);
   height: 100dvh; padding: 0;

@@ -31,7 +31,7 @@ function History({ jobs, open }: { jobs: Job[]; open: (image: GalleryImage) => v
 }
 
 function HistoryIcon() {
-  return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  return <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M3 6v5h5M3.6 10a8.5 8.5 0 1 1 .9 6M12 7v5l3 2"/>
   </svg>;
 }
@@ -134,10 +134,11 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
 
   return <>
     <AppBar><nav aria-label="Workspace">
-      <button className="history-nav" aria-pressed={history} onClick={() => { setHistory(v => !v); setPreview(undefined); }}>
-        <HistoryIcon />{history ? "Back to studio" : "History"}
+      <button className="toolbar-icon" aria-label="History" aria-pressed={history}
+        title={history ? "Back to studio" : "History"} onClick={() => { setHistory(v => !v); setPreview(undefined); }}>
+        <HistoryIcon />
       </button>
-      <button id="workspace-settings" className="settings-trigger" aria-label="Settings" title="Settings" onClick={e => openSettings(e.currentTarget)}><SettingsIcon/></button>
+      <button id="workspace-settings" className="toolbar-icon" aria-label="Settings" title="Settings" onClick={e => openSettings(e.currentTarget)}><SettingsIcon/></button>
     </nav></AppBar>
     <main className="studio">
       <aside className="control-panel" aria-label="Image controls">
