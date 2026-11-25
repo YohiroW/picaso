@@ -23,7 +23,7 @@ it("offers masked entry and optional browsing when no key exists", async () => {
   expect(close).toHaveBeenCalledOnce();
 });
 
-it("keeps saved-key removal behind a confirmation in the Saved key section", async () => {
+it("keeps saved-key removal behind a confirmation in the API key section", async () => {
   const status = { selected: "keychain" as const, environment: false, keychain: true, keychainError: false };
   const remove = vi.spyOn(desktop, "remove").mockResolvedValue({ ...status, keychain: false });
   const onChange = vi.fn();

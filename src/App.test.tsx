@@ -21,7 +21,7 @@ it("returns from either settings section to the same history, draft and keyboard
   await user.click(screen.getByRole("button", { name: "History" }));
   const gear = screen.getByRole("button", { name: "Settings" });
   expect(gear.textContent).toBe("");
-  for (const section of ["Connection", "Saved key"]) {
+  for (const section of ["Connection", "API key"]) {
     await user.click(gear);
     await user.click(screen.getByRole("button", { name: section }));
     expect(screen.getByRole("heading", { name: section })).toBeTruthy();

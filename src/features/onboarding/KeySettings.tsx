@@ -3,7 +3,7 @@ import { Label } from "../../components/ui/label";
 import { desktop, sourceName, type CredentialStatus } from "../../lib/desktop";
 
 type Page = "connection" | "saved";
-const titles = { connection: "Connection", saved: "Saved key" };
+const titles = { connection: "Connection", saved: "API key" };
 
 interface Props {
   status: CredentialStatus;
