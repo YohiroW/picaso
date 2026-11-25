@@ -105,7 +105,8 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
 .image-only .preview-original { max-height: 100dvh; }
 .image-only .preview-expand { position: fixed; top: 12px; right: 12px; }
 .preview-info { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 2px; }
-.copy-prompt { margin-inline-start: 8px; padding: 2px 7px; font-size: .8rem; vertical-align: baseline; }
+.copy-prompt { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-inline-start: 6px; padding: 0; vertical-align: middle; border: 0; border-radius: 8px; background: #373633; color: #b9af97; }
+.copy-prompt:hover:enabled { background: #45433e; color: #ded7c7; }
 .delete-image { width: min(370px, 94vw); padding: 18px; }
 .delete-summary { display: flex; align-items: center; gap: 14px; }
 .delete-summary img { width: 64px; height: 72px; flex: none; object-fit: contain; background: var(--surface); border-radius: 5px; }

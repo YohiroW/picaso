@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { desktop, imageURL } from "../../lib/desktop";
 import type { GalleryImage } from "./Gallery";
 
@@ -10,6 +10,12 @@ export function ImagePreview({ image, close, edit, busy }: {
   const [notice, setNotice] = useState("");
   const [missing, setMissing] = useState(false);
   const [imageOnly, setImageOnly] = useState(false);
+  const copied = notice === "Prompt copied.";
+  useEffect(() => {
+    if (!copied) return;
+    const timeout = window.setTimeout(() => setNotice(""), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [copied]);
   useLayoutEffect(() => {
     const el = dialog.current!;
     el.showModal();
@@ -65,13 +71,20 @@ export function ImagePreview({ image, close, edit, busy }: {
             </svg>
           </button>
         </div>}
-      {!imageOnly && <div className="preview-info"><p>{job.prompt}<button className="copy-prompt" aria-label="Copy prompt" onClick={copyPrompt}>
-        {notice === "Prompt copied." ? "Copied" : "Copy"}</button></p>
+      {!imageOnly && <div className="preview-info"><p>{job.prompt}<button className="copy-prompt" type="button"
+        aria-label="Copy prompt" title={copied ? "Prompt copied" : "Copy prompt"} onClick={copyPrompt}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          {copied ? <path d="m5 12 4.5 4.5L19 7"/> : <>
+            <rect x="3" y="8" width="13" height="13" rx="3"/>
+            <path d="M8 8V6a3 3 0 0 1 3-3h7a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-2"/>
+          </>}
+        </svg>
+      </button></p>
         <small>{job.model} · {job.parameters.size} · {job.parameters.quality} · {job.parameters.output_format.toUpperCase()} · {job.parameters.n ?? 1} requested · {job.parameters.background ?? "auto"} background</small>
         {!editable && <p>Only PNG, JPEG and WebP originals can be used as edit inputs.</p>}
         <div className="actions"><button disabled={busy || missing || !editable} onClick={edit}>Continue editing</button>
           <button disabled={missing} onClick={save}>Save original…</button></div>
-        {error && <p role="alert">{error}</p>}{notice && <p className={notice === "Prompt copied." ? "sr-only" : undefined} role="status">{notice}</p>}
+        {error && <p role="alert">{error}</p>}{notice && <p className={copied ? "sr-only" : undefined} role="status">{notice}</p>}
       </div>}
     </div>
   </dialog>;
