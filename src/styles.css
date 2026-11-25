@@ -103,12 +103,18 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: .88em; }
 .custom-size { display: flex; justify-content: flex-end; gap: 8px; }
 .custom-size label { font-weight: 400; color: #645f55; font-size: .8rem; width: 5.8rem; }
 .custom-size input { margin-top: 3px; color: var(--ink); }
-.count-control { display: flex; align-items: center; gap: 9px; width: min(64%,192px); min-width: 0; }
-.range-track { flex: 1; min-width: 0; }
-.range-track input { display: block; padding: 0; border: 0; accent-color: var(--accent); height: 22px; }
-.range-ticks { display: flex; justify-content: space-between; padding-inline: 6px; font-size: .73rem; color: #645f55; }
+.count-control { --thumb-width: 22px; width: min(64%, 192px); min-width: 0; }
+.count-control input { display: block; appearance: none; height: 22px; padding: 0; border: 0; background: transparent; }
+.count-control input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line); }
+.count-control input::-webkit-slider-thumb {
+  appearance: none; width: var(--thumb-width); height: 16px; margin-top: -5px;
+  border: 1px solid #aaa79d; border-radius: 8px; background: white; box-shadow: 0 1px 2px rgb(0 0 0 / 12%);
+}
+.count-control input:disabled { opacity: .55; }
+.range-ticks { display: flex; justify-content: space-between; margin-inline: calc(var(--thumb-width) / 2); font-size: .73rem; color: #645f55; }
+.range-ticks span { display: grid; justify-content: center; width: 0; }
+.range-ticks .selected { color: var(--ink); font-weight: 700; }
 .range-ticks span::before { content: ""; display: block; height: 3px; width: 1px; background: currentColor; margin: 0 auto; }
-.count-control output { font-variant-numeric: tabular-nums; }
 .option-hint { font-size: .8rem; }
 
 /* Settings use the same warm surfaces as the studio. */

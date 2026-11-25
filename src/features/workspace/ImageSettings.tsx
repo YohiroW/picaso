@@ -200,24 +200,21 @@ export function ImageSettings({
         <div className="control-row">
           <Label htmlFor="image-count">Number of images</Label>
           <div className="count-control">
-            <div className="range-track">
-              <input
-                type="range"
-                id="image-count"
-                min="1"
-                max={model.maxImages}
-                step="1"
-                value={options.n}
-                disabled={model.maxImages === 1 || options.output_format === "svg"}
-                onChange={(e) => update({ ...options, n: Number(e.target.value) })}
-              />
-              <div className="range-ticks" aria-hidden="true">
-                {counts.map((n) => (
-                  <span key={n}>{n}</span>
-                ))}
-              </div>
+            <input
+              type="range"
+              id="image-count"
+              min="1"
+              max={model.maxImages}
+              step="1"
+              value={options.n}
+              disabled={model.maxImages === 1 || options.output_format === "svg"}
+              onChange={(e) => update({ ...options, n: Number(e.target.value) })}
+            />
+            <div className="range-ticks" aria-hidden="true">
+              {counts.map((n) => (
+                <span key={n} className={n === options.n ? "selected" : undefined}>{n}</span>
+              ))}
             </div>
-            <output htmlFor="image-count">{options.n}</output>
           </div>
         </div>
         {hint("n")}

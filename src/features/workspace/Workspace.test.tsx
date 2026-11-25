@@ -117,6 +117,8 @@ it("submits the selected catalog model, custom dimensions, count, format and bac
   fireEvent.change(width,{target:{value:"1600"}});
   await user.selectOptions(screen.getByLabelText("Quality"),"xhigh");
   fireEvent.change(screen.getByRole("slider"),{target:{value:"3"}});
+  expect(screen.getByRole("slider", {name: "Number of images"})).toHaveProperty("value", "3");
+  expect(screen.getByText("3", {selector: ".range-ticks .selected"})).toBeTruthy();
   await user.click(screen.getByText("Advanced"));
   const fmt = screen.getByLabelText("Output format") as HTMLSelectElement;
   expect(Array.from(fmt.options).find(o=>o.value==="svg")?.disabled).toBe(true);
