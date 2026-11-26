@@ -1,10 +1,15 @@
-use crate::{
-    catalog::Catalog,
+use picaso_core::{
+    catalog::{Catalog, ModelSet},
     jobs::Submission,
     library::{Job, Library},
     providers::Model,
 };
 use tauri::State;
+
+#[cfg(not(feature = "fixture-provider"))]
+const MODELS: ModelSet = ModelSet::OpenAi;
+#[cfg(feature = "fixture-provider")]
+const MODELS: ModelSet = ModelSet::Fixture;
 
 #[tauri::command]
 pub async fn import_reference(
@@ -39,16 +44,7 @@ pub fn delete_image(library: State<Library>, id: uuid::Uuid) -> Result<(), Strin
 }
 #[tauri::command]
 pub fn available_models(catalog: State<Catalog>) -> Result<Vec<Model>, String> {
-    let models = catalog.models().map_err(|e| format!("{e:#}"))?;
-    #[cfg(feature = "fixture-provider")]
-    {
-        let _ = models;
-        Ok(vec![crate::catalog::fixture()])
-    }
-    #[cfg(not(feature = "fixture-provider"))]
-    {
-        Ok(models)
-    }
+    catalog.available(MODELS).map_err(|e| format!("{e:#}"))
 }
 #[tauri::command]
 pub fn current_model(catalog: State<Catalog>) -> Result<Model, String> {
@@ -64,12 +60,9 @@ pub async fn submit_job(
     catalog: State<'_, Catalog>,
     draft: Submission,
 ) -> Result<String, String> {
-    let models = available_models(catalog)?;
-    let selected = match &draft.model {
-        Some(id) => models.into_iter().find(|m| m.id == *id),
-        None => models.into_iter().next(),
-    }
-    .ok_or("The selected model is no longer configured.")?;
+    let selected = catalog
+        .select(MODELS, draft.model.as_deref())
+        .map_err(|e| format!("{e:#}"))?;
     let library = library.inner().clone();
     #[cfg(not(feature = "fixture-provider"))]
     let key = crate::account(&state)?.resolve()?;
@@ -77,10 +70,10 @@ pub async fn submit_job(
     let _ = (state, selected);
     tauri::async_runtime::spawn_blocking(move || {
         #[cfg(not(feature = "fixture-provider"))]
-        let provider = crate::providers::openai::OpenAi::new(key, selected)?;
+        let provider = picaso_core::providers::openai::OpenAi::new(key, selected)?;
         #[cfg(feature = "fixture-provider")]
-        let provider = crate::providers::Fixture::default();
-        crate::jobs::submit(&library, &provider, &draft).map_err(|e| e.to_string())
+        let provider = picaso_core::providers::Fixture::default();
+        picaso_core::jobs::submit(&library, &provider, &draft).map_err(|e| e.to_string())
     })
     .await
     .map_err(|e| e.to_string())?

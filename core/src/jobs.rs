@@ -4,6 +4,18 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Debug, thiserror::Error)]
+pub enum SubmissionError {
+    #[error("This request ID was already used for a different submission.")]
+    Conflict,
+    #[error("{0}")]
+    Unconfirmed(String),
+    #[error("{0}")]
+    Failed(String),
+    #[error("This request is already running.")]
+    Running,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Submission {
@@ -119,14 +131,7 @@ pub fn submit(lib: &Library, provider: &dyn Provider, draft: &Submission) -> Res
         }
         image.format.validate(&image.bytes).context("The original image is damaged or has the wrong format. Restore it or choose another image.")?;
     }
-    let params = serde_json::to_value(&draft.options)?;
-    if !lib.reserve(
-        &draft.request_id,
-        prompt,
-        model,
-        draft.input_id.as_deref(),
-        &params.to_string(),
-    )? {
+    if !lib.reserve(draft, &model)? {
         return Ok(draft.request_id.to_string());
     }
     match provider.render(prompt, original.as_ref(), &draft.options) {
@@ -134,12 +139,17 @@ pub fn submit(lib: &Library, provider: &dyn Provider, draft: &Submission) -> Res
             if let Err(e) = lib.finish(&draft.request_id, output, draft.options.output_format) {
                 let message = format!("Couldn’t save the result: {e}. Check your data folder and free space. Submitting again may incur another charge.");
                 lib.fail(&draft.request_id, &message, false)?;
-                bail!("{message}")
+                return Err(SubmissionError::Failed(message).into());
             }
         }
         Err(e) => {
             lib.fail(&draft.request_id, &e.message, e.uncertain)?;
-            bail!("{}", e.message);
+            return Err(if e.uncertain {
+                SubmissionError::Unconfirmed(e.message)
+            } else {
+                SubmissionError::Failed(e.message)
+            }
+            .into());
         }
     }
     Ok(draft.request_id.to_string())

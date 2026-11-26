@@ -1,0 +1,14 @@
+[workspace]
+members = ["core", "cli"]
+exclude = ["src-tauri"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.6"
+edition = "2021"
+publish = false
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

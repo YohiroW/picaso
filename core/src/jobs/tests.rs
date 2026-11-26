@@ -21,10 +21,7 @@ fn repeated_submission_is_stored_once_and_export_survives_restart() {
     let export_dir = tempfile::tempdir().unwrap();
     let path = export_dir.path().join("export.png");
     reopened.export(&jobs[0].images[0], &path).unwrap();
-    assert_eq!(
-        std::fs::read(path).unwrap(),
-        include_bytes!("../../icons/icon.png")
-    );
+    assert_eq!(std::fs::read(path).unwrap(), crate::FIXTURE_PNG);
 }
 
 #[test]
@@ -43,7 +40,7 @@ fn write_failure_leaves_a_failed_task_without_outputs() {
 fn imported_references_are_private_to_drafts_until_used_by_a_job() {
     let root = tempfile::tempdir().unwrap();
     let library = Library::open(root.path()).unwrap();
-    let png = include_bytes!("../../icons/icon.png");
+    let png = crate::FIXTURE_PNG;
     assert!(library.import_reference(b"GIF89a").is_err());
     assert!(library.import_reference(&png[..24]).is_err());
     assert_eq!(
@@ -275,7 +272,7 @@ fn reopen_recovers_interrupted_job_and_orphan_without_resending() {
     assert!(!orphan.exists() && !temp.exists());
     assert_eq!(
         reopened.original(&old.images[0]).unwrap().bytes,
-        include_bytes!("../../icons/icon.png")
+        crate::FIXTURE_PNG
     );
     assert!(submit(&reopened, &fixture, &draft).is_err());
     assert_eq!(fixture.calls.get(), 1);
@@ -458,7 +455,7 @@ fn migrates_v1_png_without_changing_originals_or_recharging_a_retry() {
     drop(db);
     let dir = root.path().join("originals");
     std::fs::create_dir(&dir).unwrap();
-    let png = include_bytes!("../../icons/icon.png");
+    let png = crate::FIXTURE_PNG;
     std::fs::write(dir.join(format!("{id}.png")), png).unwrap();
     let lib = Library::open(root.path()).unwrap();
     let provider = Fixture::default();

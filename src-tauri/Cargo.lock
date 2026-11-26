@@ -2998,19 +2998,31 @@ dependencies = [
 name = "picaso"
 version = "0.1.6"
 dependencies = [
- "anyhow",
- "base64 0.22.1",
- "image",
- "reqwest 0.12.28",
+ "picaso-core",
  "rfd",
- "roxmltree",
- "rusqlite",
  "security-framework",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tempfile",
+ "uuid",
+]
+
+[[package]]
+name = "picaso-core"
+version = "0.1.6"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "image",
+ "reqwest 0.12.28",
+ "roxmltree",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
  "uuid",
 ]
 

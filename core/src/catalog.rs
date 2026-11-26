@@ -30,8 +30,31 @@ pub fn bundled() -> Vec<Model> {
         .models
 }
 
+#[derive(Clone, Copy)]
+pub enum ModelSet {
+    OpenAi,
+    #[cfg(feature = "fixture-provider")]
+    Fixture,
+}
+
 pub struct Catalog(pub PathBuf);
 impl Catalog {
+    pub fn available(&self, set: ModelSet) -> Result<Vec<Model>> {
+        let models = self.models()?;
+        match set {
+            ModelSet::OpenAi => Ok(models),
+            #[cfg(feature = "fixture-provider")]
+            ModelSet::Fixture => Ok(vec![fixture()]),
+        }
+    }
+
+    pub fn select(&self, set: ModelSet, id: Option<&str>) -> Result<Model> {
+        self.available(set)?
+            .into_iter()
+            .find(|model| id.is_none_or(|id| model.id == id))
+            .context("The selected model is no longer configured.")
+    }
+
     pub fn models(&self) -> Result<Vec<Model>> {
         let mut models = bundled();
         let data = match fs::read(&self.0) {

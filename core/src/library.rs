@@ -10,9 +10,14 @@ use std::{
 };
 use uuid::Uuid;
 
+use crate::jobs::{Submission, SubmissionError};
 use crate::media::{Format, Original};
 use crate::providers::{Model, Output};
 pub const UNCERTAIN: &str = "Result unconfirmed. Submitting again may incur another charge.";
+
+#[derive(Debug, thiserror::Error)]
+#[error("The workspace is already open in another Picaso process.")]
+pub struct WorkspaceBusy;
 
 #[derive(Clone)]
 pub struct Library {
@@ -35,6 +40,40 @@ pub struct Job {
     pub parameters: serde_json::Value,
     pub usage: Option<serde_json::Value>,
 }
+impl Job {
+    /// A matching, completed request can be reused without contacting its provider.
+    pub fn check_replay(&self, draft: &Submission, model: &Model) -> Result<()> {
+        let mut stored = self.parameters.clone();
+        // v1 tasks used the API's implicit auto background.
+        if stored.get("background").is_none() {
+            stored["background"] = serde_json::json!("auto");
+        }
+        if self.prompt != draft.prompt.trim()
+            || self.model != model.id
+            || self.provider != model.provider
+            || self.input_id != draft.input_id
+            || stored != serde_json::to_value(&draft.options)?
+        {
+            return Err(SubmissionError::Conflict.into());
+        }
+        match self.status.as_str() {
+            "succeeded" => Ok(()),
+            "unconfirmed" => Err(SubmissionError::Unconfirmed(
+                self.message.clone().unwrap_or_else(|| UNCERTAIN.into()),
+            )
+            .into()),
+            "failed" => Err(SubmissionError::Failed(
+                self.message
+                    .clone()
+                    .unwrap_or_else(|| "This request failed.".into()),
+            )
+            .into()),
+            "running" => Err(SubmissionError::Running.into()),
+            _ => bail!("Unknown job status."),
+        }
+    }
+}
+
 impl Library {
     pub fn open(root: &Path) -> Result<Self> {
         fs::create_dir_all(root.join("originals"))?;
@@ -44,10 +83,13 @@ impl Library {
             .create(true)
             .truncate(false)
             .open(root.join("library.lock"))?;
-        lock.try_lock()
-            .context("The library is already open in another Picaso window.")?;
+        match lock.try_lock() {
+            Ok(()) => (),
+            Err(fs::TryLockError::WouldBlock) => return Err(WorkspaceBusy.into()),
+            Err(fs::TryLockError::Error(e)) => return Err(e.into()),
+        }
         let lib = Self {
-            root: root.into(),
+            root: root.canonicalize()?,
             _lock: Arc::new(lock),
         };
         let mut conn = lib.connect()?;
@@ -117,45 +159,23 @@ impl Library {
         conn.pragma_update(None, "foreign_keys", true)?;
         Ok(conn)
     }
-    pub(crate) fn reserve(
-        &self,
-        id: &Uuid,
-        prompt: &str,
-        model: Model,
-        input: Option<&str>,
-        parameters: &str,
-    ) -> Result<bool> {
-        let conn = self.connect()?;
-        let added = conn.execute(
+    pub(crate) fn reserve(&self, draft: &Submission, model: &Model) -> Result<bool> {
+        let added = self.connect()?.execute(
             "INSERT INTO jobs(id,prompt,provider,model,status,parameters,input_id)
             VALUES (?1,?2,?3,?4,'running',?5,?6) ON CONFLICT(id) DO NOTHING",
             params![
-                id.to_string(),
-                prompt,
+                draft.request_id.to_string(),
+                draft.prompt.trim(),
                 model.provider,
                 model.id,
-                parameters,
-                input
+                serde_json::to_string(&draft.options)?,
+                draft.input_id
             ],
         )?;
         if added == 0 {
-            let (matches, status, message, stored): (bool,String,Option<String>,String) = conn.query_row(
-                "SELECT prompt=?2 AND provider=?3 AND model=?4 AND input_id IS ?5,status,message,parameters FROM jobs WHERE id=?1",
-                params![id.to_string(),prompt,model.provider,model.id,input], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?)))?;
-            let mut prior: serde_json::Value = serde_json::from_str(&stored)?;
-            // v1 tasks used the API's implicit auto background.
-            if prior.get("background").is_none() {
-                prior["background"] = serde_json::json!("auto");
-            }
-            if !matches || prior != serde_json::from_str::<serde_json::Value>(parameters)? {
-                bail!("This request ID was already used for a different submission.");
-            }
-            if status != "succeeded" {
-                bail!(
-                    "{}",
-                    message.unwrap_or_else(|| "This request is already running.".into())
-                );
-            }
+            self.job(draft.request_id)?
+                .context("The existing job is missing.")?
+                .check_replay(draft, model)?;
         }
         Ok(added != 0)
     }
@@ -258,35 +278,59 @@ impl Library {
             .context("This image is missing from the library.")?;
         Format::parse(&ext).context("Unknown library image format.")
     }
-    pub fn original(&self, id: &str) -> Result<Original> {
+    pub fn image_file(&self, id: &str) -> Result<(Format, PathBuf)> {
         let id = Uuid::parse_str(id)
             .context("Choose an image from History.")?
             .to_string();
         let format = self.image_format(&id)?;
-        let bytes = fs::read(
-            self.root
-                .join("originals")
-                .join(format!("{id}.{}", format.extension())),
-        )
-        .context(
+        let path = self
+            .root
+            .join("originals")
+            .join(format!("{id}.{}", format.extension()));
+        Ok((format, path))
+    }
+    pub fn original(&self, id: &str) -> Result<Original> {
+        let (format, path) = self.image_file(id)?;
+        let bytes = fs::read(path).context(
             "The original image is missing or unreadable. Restore it or choose another image.",
         )?;
         Ok(Original { bytes, format })
     }
-    pub fn export(&self, id: &str, dest: &Path) -> Result<()> {
-        let data = self.original(id)?;
-        if dest
-            .parent()
-            .and_then(|p| p.canonicalize().ok())
-            .is_some_and(|p| p.starts_with(&self.root))
-        {
+    pub fn export_directory(&self, dir: &Path) -> Result<PathBuf> {
+        let dir = dir.canonicalize()?;
+        anyhow::ensure!(dir.is_dir(), "Choose a destination folder.");
+        if dir.starts_with(&self.root) {
             bail!("Choose a location outside Picaso’s data folder.");
         }
-        let mut tmp = tempfile::NamedTempFile::new_in(
-            dest.parent().context("Choose a destination folder.")?,
-        )?;
+        Ok(dir)
+    }
+    pub fn export(&self, id: &str, dest: &Path) -> Result<()> {
+        self.write_export(id, dest, true)
+    }
+    /// Automation can replay the same export while preserving unrelated files.
+    pub fn export_new(&self, id: &str, dest: &Path) -> Result<()> {
+        self.write_export(id, dest, false)
+    }
+    fn write_export(&self, id: &str, dest: &Path, replace: bool) -> Result<()> {
+        let dir = self.export_directory(dest.parent().context("Choose a destination folder.")?)?;
+        let data = self.original(id)?;
+        let mut tmp = tempfile::NamedTempFile::new_in(dir)?;
         tmp.write_all(&data.bytes)?;
-        tmp.persist(dest)?;
+        if replace {
+            tmp.persist(dest)?;
+        } else if let Err(error) = tmp.persist_noclobber(dest) {
+            if error.error.kind() == std::io::ErrorKind::AlreadyExists {
+                let metadata = dest.symlink_metadata()?;
+                if metadata.is_file()
+                    && metadata.len() == data.bytes.len() as u64
+                    && fs::read(dest)? == data.bytes
+                {
+                    return Ok(());
+                }
+                bail!("The export destination already exists with different content. Choose another path.");
+            }
+            return Err(error.into());
+        }
         Ok(())
     }
     pub fn delete_image(&self, id: Uuid) -> Result<()> {
@@ -316,20 +360,21 @@ impl Library {
         }
     }
     pub fn history(&self, recent_only: bool) -> Result<Vec<Job>> {
+        // Each job contributes at least one image or status tile to the recent gallery.
+        let limit = if recent_only { "LIMIT 8" } else { "" };
+        self.query_jobs(&format!("WHERE status != 'succeeded' OR EXISTS (SELECT 1 FROM images WHERE job=jobs.id AND deleted=0)
+            ORDER BY created DESC, rowid DESC {limit}"), [])
+    }
+    pub fn job(&self, id: Uuid) -> Result<Option<Job>> {
+        Ok(self.query_jobs("WHERE id=?1", [id.to_string()])?.pop())
+    }
+    fn query_jobs(&self, filter: &str, params: impl rusqlite::Params) -> Result<Vec<Job>> {
         let mut conn = self.connect()?;
         let tx = conn.transaction()?;
-        // Each job contributes at least one image or status tile to the recent gallery.
-        let filter = if recent_only {
-            "ORDER BY created DESC,rowid DESC LIMIT 8"
-        } else {
-            "ORDER BY created DESC,rowid DESC"
-        };
-        let mut stmt = tx.prepare(&format!("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs
-            WHERE status != 'succeeded' OR EXISTS (SELECT 1 FROM images WHERE job=jobs.id AND deleted=0)
-            {filter}"))?;
+        let mut stmt = tx.prepare(&format!("SELECT id,prompt,provider,model,status,input_id,created,message,parameters,usage FROM jobs {filter}"))?;
         let mut outputs =
             tx.prepare("SELECT id FROM images WHERE job=?1 AND deleted=0 ORDER BY rowid")?;
-        let mut rows = stmt.query([])?;
+        let mut rows = stmt.query(params)?;
         let mut jobs = Vec::new();
         while let Some(row) = rows.next()? {
             let id: String = row.get(0)?;

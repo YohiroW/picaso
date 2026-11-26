@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Workspace } from "./Workspace";
-import bundled from "../../../src-tauri/models.json";
+import bundled from "../../../core/models.json";
 import { desktop, type Job } from "../../lib/desktop";
 
 const original: Job = {

@@ -1,14 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod catalog;
 mod commands;
 mod credentials;
-mod jobs;
-mod library;
-mod media;
-mod providers;
 use commands::*;
 use credentials::{Credentials, MacKeychain, Source, Status};
+use picaso_core::{catalog, library};
 use std::sync::Mutex;
 use tauri::{Manager, State};
 

@@ -35,7 +35,7 @@
       "icons/icon.icns"
     ],
     "category": "GraphicsAndDesign",
-    "resources": {"models.json":"models.json"},
+    "resources": {"../core/models.json":"models.json"},
     "macOS": {
       "minimumSystemVersion": "14.0",
       "signingIdentity": "-"

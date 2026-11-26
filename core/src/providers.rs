@@ -1,4 +1,3 @@
-#[cfg(any(test, not(feature = "fixture-provider")))]
 pub mod openai;
 pub use crate::catalog::Model;
 use crate::jobs::ImageOptions;
@@ -50,7 +49,7 @@ impl Provider for Fixture {
         self.calls.set(self.calls.get() + 1);
         let input = original
             .map(|im| im.bytes.as_slice())
-            .unwrap_or(include_bytes!("../icons/icon.png"));
+            .unwrap_or(crate::FIXTURE_PNG);
         let mut images = Vec::new();
         for i in 0..options.n {
             if options.output_format == Format::Svg {

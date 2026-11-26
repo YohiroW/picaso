@@ -45,7 +45,7 @@ fn serve(status: u16, body: String) -> (OpenAi, thread::JoinHandle<(String, Vec<
 }
 #[test]
 fn sends_json_or_one_original_multipart_to_the_official_paths() {
-    let png = include_bytes!("../../../icons/icon.png");
+    let png = crate::FIXTURE_PNG;
     use crate::{
         jobs::{self, Submission},
         library::Library,

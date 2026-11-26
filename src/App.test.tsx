@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { desktop } from "./lib/desktop";
-import catalog from "../src-tauri/models.json";
+import catalog from "../core/models.json";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
