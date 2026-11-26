@@ -19,12 +19,12 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-async function openWorkspace(canEdit = true) {
+async function openWorkspace(canEdit = true, platform = "windows") {
   vi.stubGlobal("__TAURI_INTERNALS__", {convertFileSrc: (id: string) => "/image/" + id});
   vi.spyOn(desktop,"history").mockResolvedValue([original]);
   vi.spyOn(desktop,"models").mockResolvedValue([{...bundled.models[0],provider:"fixture",id:"fixture",canEdit}]);
   const request = vi.spyOn(desktop,"submit").mockRejectedValue("The original image is missing.");
-  render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  render(<Workspace status={{platform, selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Prompt"), "Add a copper edge");
   const tile = await screen.findByRole("button", {name:"View image 2: Picaso icon"});
@@ -181,15 +181,24 @@ it("confirms deletion of the chosen original, keeps its sibling and refreshes Hi
   expect(request).not.toHaveBeenCalled();
 });
 
-it("does not submit an edit while an input method is composing text", async () => {
-  const { request } = await openWorkspace();
+it.each([
+  { platform: "windows", label: "Ctrl+Enter", paste: "Ctrl+V", shortcut: "Control+Enter", modifier: {ctrlKey: true} },
+  { platform: "macos", label: "⌘ ↩", paste: "⌘V", shortcut: "Meta+Enter", modifier: {metaKey: true} },
+])("shows and handles the $platform shortcuts, including during IME composition", async ({platform, label, paste, shortcut, modifier}) => {
+  const { user, request } = await openWorkspace(true, platform);
+  expect(screen.getByText(label, {selector: "kbd"})).toBeTruthy();
+  expect(screen.getByTitle(`Replace reference image (or paste with ${paste})`)).toBeTruthy();
+  expect(screen.getByRole("button", {name: "Apply edit"}).getAttribute("aria-keyshortcuts")).toBe(shortcut);
   const input = screen.getByLabelText("Edit instructions");
   fireEvent.change(input, {target: {value:"保留折纸纹理"}});
-  fireEvent.keyDown(input, {key:"Enter", metaKey:true, isComposing:true, keyCode:229});
+  fireEvent.keyDown(input, {key:"Enter", ...modifier, isComposing:true, keyCode:229});
   expect(request).not.toHaveBeenCalled();
-  fireEvent.keyDown(input, {key:"Enter", metaKey:true, isComposing:false});
+  fireEvent.keyDown(input, {key:"Enter", ...modifier, isComposing:false});
   await waitFor(() => expect(request).toHaveBeenCalledOnce());
   expect(request.mock.calls[0][0].prompt).toBe("保留折纸纹理");
+  await user.click(screen.getByRole("button", {name: "New image"}));
+  expect(screen.getByTitle(`Add reference image (or paste with ${paste})`)).toBeTruthy();
+  expect(screen.getByRole("button", {name: "Generate image"}).getAttribute("aria-keyshortcuts")).toBe(shortcut);
 });
 
 it("limits the studio by image count and preserves drafts through full task history", async () => {
@@ -201,7 +210,7 @@ it("limits the studio by image count and preserves drafts through full task hist
   const history = vi.spyOn(desktop, "history").mockImplementation(async recent => recent ? jobs : [failed, ...jobs]);
   vi.spyOn(desktop,"models").mockResolvedValue([{...bundled.models[0],provider:"fixture",id:"test"}]);
   const request = vi.spyOn(desktop, "submit").mockResolvedValue("B");
-  render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  render(<Workspace status={{platform: "windows", selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
   const images = await screen.findAllByRole("button", { name: /^View image/ });
   expect(images).toHaveLength(8);
@@ -239,7 +248,7 @@ it("submits the selected catalog model, custom dimensions, count, format and bac
   vi.spyOn(desktop,"models").mockResolvedValue(bundled.models);
   vi.spyOn(desktop,"history").mockResolvedValue([]);
   const submit=vi.spyOn(desktop,"submit").mockResolvedValue("B");
-  render(<Workspace status={{selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={()=>{}}/>);
+  render(<Workspace status={{platform: "windows", selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={()=>{}}/>);
   const user=userEvent.setup();
   await user.type(screen.getByLabelText("Prompt"),"Paper icon");
   const model = await screen.findByRole("combobox", {name: "Model"}) as HTMLSelectElement;
@@ -287,7 +296,7 @@ it.each([false, true])("replaces three landscape placeholders in an eight-image 
       };
     });
   });
-  render(<Workspace status={{selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  render(<Workspace status={{platform: "windows", selected:"environment",environment:true,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
   expect(await screen.findAllByRole("button", { name: /^View image/ })).toHaveLength(8);
   await user.type(screen.getByLabelText("Prompt"), "Wooded hills");
@@ -339,7 +348,7 @@ it.each(["failed", "unconfirmed"])("restores a %s edit as a draft for explicit r
   vi.spyOn(desktop, "history").mockResolvedValue([job, original]);
   vi.spyOn(desktop, "models").mockResolvedValue([{ ...bundled.models[0], provider: "fixture", id: "fixture" }]);
   const submit = vi.spyOn(desktop, "submit").mockResolvedValue("retry");
-  render(<Workspace status={{selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
+  render(<Workspace status={{platform: "windows", selected:null,environment:false,keychain:false,keychainError:false}} openSettings={() => {}}/>);
   const user = userEvent.setup();
   await screen.findByText(status === "failed" ? "Generation failed" : "Result unconfirmed");
   expect(screen.queryByText("Generating…")).toBeNull();

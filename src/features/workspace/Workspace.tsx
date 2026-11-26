@@ -33,6 +33,9 @@ function HistoryIcon() {
 }
 
 export function Workspace({ status, openSettings }: { status: CredentialStatus; openSettings: (trigger: HTMLButtonElement) => void }) {
+  const isMac = status.platform === "macos";
+  const submitShortcut = isMac ? "⌘ ↩" : "Ctrl+Enter";
+  const pasteShortcut = isMac ? "⌘V" : "Ctrl+V";
   const [history, setHistory] = useState(false);
   const [snapshot, setSnapshot] = useState<{ history: boolean; jobs: Job[] }>();
   const [pending, setPending] = useState<Job>();
@@ -254,14 +257,14 @@ export function Workspace({ status, openSettings }: { status: CredentialStatus; 
                 }}/>
                 <button type="button" className="attach-image" disabled={busy || importing} onClick={() => fileInput.current?.click()}
                   aria-label={importing ? "Adding image" : reference ? "Replace image" : "Add image"} aria-busy={importing}
-                  title={reference ? "Replace reference image (or paste with ⌘V)" : "Add reference image (or paste with ⌘V)"}>
+                  title={`${reference ? "Replace" : "Add"} reference image (or paste with ${pasteShortcut})`}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m21 11-9.2 9.2a6 6 0 0 1-8.5-8.5l10-10a4 4 0 0 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.2-9.2"/></svg>
                 </button>
-                <kbd title="Command + Return">⌘ ↩</kbd>
-                <button type="submit" className="primary submit" disabled={!canSubmit}>{busy ? "Creating…" : reference ? (options && options.n>1 ? `Apply edit · ${options.n} images` : "Apply edit") : (options && options.n>1 ? `Generate ${options.n} images` : "Generate image")}<span aria-hidden="true">↑</span></button>
+                <kbd title={isMac ? "Command + Return" : "Ctrl+Enter"}>{submitShortcut}</kbd>
+                <button type="submit" className="primary submit" aria-keyshortcuts={isMac ? "Meta+Enter" : "Control+Enter"} disabled={!canSubmit}>{busy ? "Creating…" : reference ? (options && options.n>1 ? `Apply edit · ${options.n} images` : "Apply edit") : (options && options.n>1 ? `Generate ${options.n} images` : "Generate image")}<span aria-hidden="true">↑</span></button>
               </div>
             </div>
-            {model && !available && <p className="feedback">Choose a key to create images. <button type="button" className="link" onClick={e => openSettings(e.currentTarget)}>Settings</button></p>}
+            {model && !available && <p className="feedback">Connect your API key to create images. <button type="button" className="link" onClick={e => openSettings(e.currentTarget)}>Settings</button></p>}
             {reference && model && !model.canEdit && <p role="alert">This model cannot edit a reference. Remove it to generate a new image.</p>}
             {error && <p role="alert" className="feedback">{error}</p>}
             {!busy && notice && <p className="feedback">{notice}</p>}

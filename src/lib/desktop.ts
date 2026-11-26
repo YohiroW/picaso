@@ -2,6 +2,7 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type Source = "environment" | "keychain";
 export interface CredentialStatus {
+  platform: string;
   selected: Source | null;
   environment: boolean;
   keychain: boolean;

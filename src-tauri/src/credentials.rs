@@ -11,6 +11,7 @@ pub enum Source {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
+    pub platform: &'static str,
     pub selected: Option<Source>,
     pub environment: bool,
     pub keychain: bool,
@@ -100,6 +101,7 @@ impl<V: Vault> Credentials<V> {
         let key = self.vault.get();
         let source = self.selected();
         Ok(Status {
+            platform: std::env::consts::OS,
             preference_error: source.is_err(),
             selected: source.ok().flatten(),
             environment: self.environment.is_some(),

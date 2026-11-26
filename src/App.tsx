@@ -15,7 +15,11 @@ export function App() {
 
   function load() {
     setError("");
-    desktop.status().then(next => { setStatus(next); setSettings(!next.selected && !next.preferenceError); }).catch(e => setError(String(e)));
+    desktop.status().then(next => {
+      setStatus(next);
+      const unsupportedSource = next.selected === "keychain" && next.platform !== "macos";
+      setSettings(unsupportedSource || (!next.selected && !next.preferenceError));
+    }).catch(e => setError(String(e)));
   }
   useEffect(load, []);
   function openSettings(trigger: HTMLButtonElement) {

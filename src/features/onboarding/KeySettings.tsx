@@ -22,8 +22,9 @@ function NavigationIcon({ page }: { page: Page }) {
 }
 
 export function KeySettings({ status, onChange, onClose, refreshError }: Props) {
+  const supportsKeychain = status.platform === "macos";
   const [page, setPage] = useState<Page>(
-    !status.selected && !status.environment && !status.keychain ? "saved" : "connection"
+    supportsKeychain && !status.selected && !status.environment && !status.keychain ? "saved" : "connection"
   );
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,6 +50,22 @@ export function KeySettings({ status, onChange, onClose, refreshError }: Props) 
     finally { setBusy(false); setConfirmRemove(false); }
   }
 
+  const portalLink = <a className="link" href="https://platform.openai.com/api-keys" target="_blank"
+    rel="noreferrer" onClick={event => {
+      event.preventDefault();
+      setError("");
+      void desktop.openPortal().catch(e => setError(String(e)));
+    }}>Get an API key <span aria-hidden="true">↗</span></a>;
+
+  let environmentDetail = <><code>OPENAI_API_KEY</code> is available in this session.</>;
+  if (!status.environment && !supportsKeychain) {
+    environmentDetail = <>Set <code>OPENAI_API_KEY</code> in your {status.platform === "windows" ? "user environment variables" : "environment"}, then restart Picaso.</>;
+  } else if (!status.environment) {
+    environmentDetail = <><code>OPENAI_API_KEY</code> is unavailable in this session.</>;
+  } else if (status.selected === "environment") {
+    environmentDetail = <>Picaso is using <code>OPENAI_API_KEY</code>.</>;
+  }
+
   return <main className="settings-layout">
     <aside className="settings-sidebar">
       <button type="button" className="settings-back" onClick={onClose} disabled={busy}>
@@ -56,49 +73,53 @@ export function KeySettings({ status, onChange, onClose, refreshError }: Props) 
         Back to workspace
       </button>
       <h1>Settings</h1>
-      <nav aria-label="Settings">
+      {supportsKeychain && <nav aria-label="Settings">
         {(["connection", "saved"] as const).map(id => <button type="button" key={id}
           aria-current={id === page ? "page" : undefined} onClick={() => navigate(id)} disabled={busy}>
           <NavigationIcon page={id}/>{titles[id]}
         </button>)}
-      </nav>
+      </nav>}
     </aside>
 
     <div className="settings-scroll" key={page}>
       <section className="settings-detail" aria-labelledby="settings-page-title">
         <h2 ref={heading} id="settings-page-title" tabIndex={-1}>{titles[page]}</h2>
-        <p className="settings-intro">{page === "connection"
-          ? "Choose which OpenAI API key Picaso uses to create images."
-          : "Store an OpenAI API key in your macOS login keychain."}</p>
-        {status.preferenceError && <p role="alert">Your saved key preference could not be read. Choose a source again.</p>}
+        <p className="settings-intro">{page === "saved" ? "Store an OpenAI API key in your macOS login keychain."
+          : supportsKeychain ? "Choose which OpenAI API key Picaso uses to create images."
+          : "Connect your OpenAI API key to create images."}</p>
+        {status.preferenceError && <p role="alert">{supportsKeychain
+          ? "Your saved key preference could not be read. Choose a source again."
+          : "Your key preference could not be read. Connect your environment key again."}</p>}
         {refreshError && <p role="alert">{refreshError}</p>}
 
         <fieldset disabled={busy}>
           {page === "connection" ? <>
-            <div className="settings-row">
+            {supportsKeychain && <div className="settings-row">
               <h3>Selected source</h3>
               <span>{status.selected ? sourceName(status.selected) : "None selected"}
                 {status.selected && !status[status.selected] && " (unavailable)"}</span>
-            </div>
+            </div>}
             <div className="settings-row">
-              <div><h3>Environment variable</h3><p><code>OPENAI_API_KEY</code> is {status.environment ? "available" : "unavailable"} in this session.</p></div>
+              <div><h3>Environment variable</h3><p>{environmentDetail}</p>
+                {!supportsKeychain && portalLink}
+              </div>
               {status.environment && status.selected !== "environment" &&
                 <button onClick={() => change(() => desktop.select("environment"))}>Use environment key</button>}
             </div>
-            <div className="settings-row">
+            {supportsKeychain && <div className="settings-row">
               <div><h3>macOS Keychain</h3><p>{status.keychainError ? "Unlock your login keychain to access your saved key." : status.keychain ? "A key is saved on this Mac." : "No key saved on this Mac."}</p></div>
               <div className="settings-actions">{status.keychain && status.selected !== "keychain" &&
                 <button onClick={() => change(() => desktop.select("keychain"))}>Use saved key</button>}
                 <button onClick={() => navigate("saved")}>{status.keychain ? "Manage key" : "Add key…"}</button>
               </div>
-            </div>
+            </div>}
           </> : <>
             {status.keychainError && <p role="alert">Unlock your login keychain to access your saved key.</p>}
             <form className="settings-key-form" onSubmit={e => { e.preventDefault(); void change(() => desktop.save(key)); }}>
               <Label htmlFor="api-key">{status.keychain ? "Replacement API key" : "OpenAI API key"}</Label>
               <input id="api-key" type="password" autoComplete="off" spellCheck={false} value={key} onChange={e => setKey(e.target.value)}/>
               <div className="settings-form-actions">
-                <button type="button" className="link" onClick={() => desktop.openPortal().catch(e => setError(String(e)))}>Get an API key ↗</button>
+                {portalLink}
                 <button className="primary" disabled={!key.trim()}>Save and use key</button>
               </div>
             </form>

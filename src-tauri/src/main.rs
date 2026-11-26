@@ -47,17 +47,11 @@ fn save_key(state: State<Account>, key: String) -> Result<Status, String> {
 fn remove_key(state: State<Account>) -> Result<Status, String> {
     account(&state)?.remove()
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn open_key_portal() -> Result<(), String> {
-    if std::process::Command::new("open")
-        .arg("https://platform.openai.com/api-keys")
-        .status()
-        .is_ok_and(|s| s.success())
-    {
-        Ok(())
-    } else {
-        Err("Open https://platform.openai.com/api-keys in your browser.".into())
-    }
+    const URL: &str = "https://platform.openai.com/api-keys";
+    open::that_detached(URL)
+        .map_err(|_| format!("Couldn’t open your browser. Visit {URL} to get a key."))
 }
 
 fn main() {

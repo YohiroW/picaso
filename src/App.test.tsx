@@ -11,7 +11,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 it("returns from either settings section to the same history, draft and keyboard focus", async () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   vi.spyOn(desktop, "status").mockResolvedValue({
-    selected: "environment", environment: true, keychain: false, keychainError: false,
+    platform: "macos", selected: "environment", environment: true, keychain: false, keychainError: false,
   });
   vi.spyOn(desktop, "models").mockResolvedValue(catalog.models);
   vi.spyOn(desktop, "history").mockResolvedValue([]);
@@ -30,4 +30,17 @@ it("returns from either settings section to the same history, draft and keyboard
     expect(screen.getByLabelText("Prompt")).toHaveProperty("value", "Keep this draft");
     expect(screen.getByRole("heading", { name: "History" })).toBeTruthy();
   }
+});
+
+it("opens Connection for a saved-key preference carried over to Windows", async () => {
+  vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  vi.spyOn(desktop, "models").mockResolvedValue(catalog.models);
+  vi.spyOn(desktop, "history").mockResolvedValue([]);
+  vi.spyOn(desktop, "status").mockResolvedValue({
+    platform: "windows", selected: "keychain", environment: false, keychain: false, keychainError: false,
+  });
+  render(<App/>);
+  expect(await screen.findByRole("heading", {name: "Connection"})).toBeTruthy();
+  expect(screen.getByText("OPENAI_API_KEY")).toBeTruthy();
+  expect(screen.queryByText(/Keychain/i)).toBeNull();
 });
