@@ -25,3 +25,29 @@ command = '''
 npm run tauri -- build --target aarch64-apple-darwin --bundles app &&
   open "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Picaso.app"
 '''
+
+[[actions]]
+name = "Launch Picaso"
+icon = "run"
+platform = "win32"
+command = '''
+$app = '.\src-tauri\target\release\picaso.exe'
+if (Test-Path -LiteralPath $app -PathType Leaf) {
+  Start-Process -FilePath $app
+} else {
+  throw "Run 'Build and Launch Picaso' to create the app first."
+}
+'''
+
+[[actions]]
+name = "Build and Launch Picaso"
+icon = "run"
+platform = "win32"
+command = '''
+npm.cmd run tauri -- build --no-bundle
+if ($LASTEXITCODE -eq 0) {
+  Start-Process -FilePath '.\src-tauri\target\release\picaso.exe'
+} else {
+  throw "Tauri build failed (exit code $LASTEXITCODE)."
+}
+'''
